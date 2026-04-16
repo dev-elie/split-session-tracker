@@ -89,6 +89,7 @@ public class Formats
 					break;              // 1 K per K
 				case "m":
 					divK = 1_000_000L;
+					localDF = DF_3DP;
 					break;          // 1,000 K per M
 				case "b":
 					divK = 1_000_000_000L;
@@ -182,7 +183,7 @@ public class Formats
 			if (suffixCh == null)
 			{
 				log.debug("No suffix provided, falling back to config default");
-				String def = config.defaultValueMultiplier().getValue();
+				String def = config == null ? null : config.defaultValueMultiplier().getValue();
 				suffix = def != null && !def.isEmpty() ? Character.toLowerCase(def.charAt(0)) : ' ';
 			}
 			else
@@ -213,4 +214,3 @@ public class Formats
 	}
 
 }
-

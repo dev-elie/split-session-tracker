@@ -361,7 +361,7 @@ public class ManagerSession
 			// copy players
 			newChild.getPlayers().addAll(curr.getPlayers());
 			// add the new player (main)
-			newChild.getPlayers().add(player);
+			newChild.getPlayers().add(fMain);
 
 			// End current child (but keep kills)
 			curr.setEnd(Instant.now());
@@ -380,7 +380,7 @@ public class ManagerSession
 		}
 		else
 		{
-			curr.getPlayers().add(player);
+			curr.getPlayers().add(fMain);
 			// Record a JOINED event kill in the current child (no kills yet)
 			Kill joinEvent = new Kill(curr.getId(), fMain, 0L, Instant.now());
 			joinEvent.setType("JOINED");
@@ -414,7 +414,15 @@ public class ManagerSession
 			return false;
 		}
 
-		player = player.trim();
+		if (player == null)
+		{
+			return false;
+		}
+		player = playerManager.getMainName(player.trim());
+		if (player == null || player.isBlank())
+		{
+			return false;
+		}
 		if (!curr.getPlayers().contains(player))
 		{
 			return false;
@@ -747,7 +755,7 @@ public class ManagerSession
 				// Aggregate split only for players active in THIS session
 				if (splits.containsKey(player))
 				{
-					Long delta = playerTotalThisSession - sessionAvg;
+					Long delta = sessionAvg - playerTotalThisSession;
 					splits.compute(player, (k, v) -> (v) + delta);
 				}
 			}
