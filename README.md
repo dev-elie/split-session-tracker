@@ -12,6 +12,14 @@ A RuneLite plugin for automatically managing and tracking splits in group activi
 - **Player Management**: Keep track of current participating players with support for alt accounts
 - **Split Calculation**: Automatically calculates fair splits based on session participation
 - **Settlement Guidance**: View metrics to settle payments between players
+- **Popout Dashboard**: Open the plugin in a wider standalone window with the normal controls on the left and live graphs on the right
+    - **GP/hr over time**: Tracks cumulative GP/hr and refreshes the live rate once per minute while the popout is open
+    - **Highest earnings**: Shows a bar chart of player loot totals
+    - **Settlement balance**: Shows who should receive and who owes
+    - **Show sleeping players**: Toggle inactive/sleeping players in graph modes from the graph controls
+- **Synced Panels**: Changes made in the sidebar or popout refresh both views
+- **Fast Form Entry**: Press Enter in form fields and dropdowns to submit the related safe action
+- **Stable Dropdowns**: Player dropdowns keep the selected player after refreshes unless that player is no longer valid
 
 ## How It Works
 
@@ -27,7 +35,8 @@ A RuneLite plugin for automatically managing and tracking splits in group activi
 - **Option B**: In the `Add players to session` section, select the player from the dropdown and click `Add to session`
 
 ### Step 4: Add splits to the session
-- **Manual method**: In the `Add split to session` section, select a player, enter an amount (e.g. 300k, 3.4m, 1.23b), and click 'Add'
+- **Manual method**: In the `Add split to session` section, select a player, enter an amount (e.g. 300k, 3.4m, 1.23b), and click `Add`
+- You can press Enter in the amount field or supported player dropdowns to submit the same action as the button
 - **Semi-automatic method**:
     1. In settings under `Chat Detection Settings`, enable `Chat detection` and disable `Auto-apply when in session`
     2. When drops are announced in Chat, they'll appear in the `Detected values` section
@@ -42,6 +51,10 @@ A RuneLite plugin for automatically managing and tracking splits in group activi
 
 ### Step 6: View settlements
 - Settlement calculations appear automatically in the plugin panel under the `Settlement` section
+- Click `Pop Out` to open a standalone dashboard. The left side contains the normal plugin controls and the right side contains graph modes.
+- In the popout dashboard, choose between `GP/hr over time`, `Highest earnings`, and `Settlement balance`.
+- Use `Show sleeping players` on the graph side to include or hide inactive players in the graph.
+- The sidebar and popout stay synced after adding splits, editing detected values, changing recent splits, or changing session players.
 
 ### Step 7: Stop the session
 - Click the Stop button in the plugin panel when finished
@@ -51,8 +64,8 @@ A RuneLite plugin for automatically managing and tracking splits in group activi
 ### General Settings
 
 - **Enable tour**: Enables the tour/explanation of the plugin
-- **Enable popout**: Add/removes a button that allows the plugin to be shown in a new window
-- **Default value**: The plugin allows the user to select the default value they want to use when inputing splits, meaning that if "m, aka a million" is selected 1 is calculated as 1,000,000.
+- **Popout**: The plugin panel includes a `Pop Out` button that opens the dashboard window
+- **Default value**: The plugin allows the user to select the default value they want to use when inputting splits, meaning that if "m, aka a million" is selected 1 is calculated as 1,000,000
 
 ### Settlement Settings
 
