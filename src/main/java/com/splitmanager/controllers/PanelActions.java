@@ -80,6 +80,18 @@ public interface PanelActions
 	void deleteSelectedPendingValue(int tableRowIndex);
 
 	/**
+	 * Load a stopped session into read-only history mode.
+	 *
+	 * @param sessionId selected session id
+	 */
+	void loadHistory(String sessionId);
+
+	/**
+	 * Exit read-only history mode.
+	 */
+	void unloadHistory();
+
+	/**
 	 * Handle selection change in known-players list.
 	 *
 	 * @param selected currently selected name

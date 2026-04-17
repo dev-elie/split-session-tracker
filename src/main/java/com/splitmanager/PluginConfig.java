@@ -167,6 +167,25 @@ public interface PluginConfig extends Config
 	)
 	void currentSessionId(String value);
 
+	@ConfigItem(
+		keyName = KEY_HISTORY_LOADED,
+		name = "History Loaded",
+		description = "Whether a historical session is currently being viewed",
+		hidden = true
+	)
+	default boolean historyLoaded()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = KEY_HISTORY_LOADED,
+		name = "History Loaded",
+		description = "Whether a historical session is currently being viewed",
+		hidden = true
+	)
+	void historyLoaded(boolean value);
+
 	/**
 	 * Retrieves a comma-separated string of known players.
 	 *

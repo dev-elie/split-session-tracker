@@ -141,6 +141,8 @@ public class ManagerSession
 			log.warn("Configured current session id {} was not found in persisted sessions", currentSessionId);
 			currentSessionId = null;
 		}
+		Session current = getCurrentSession().orElse(null);
+		historyLoaded = current != null && !current.isActive() && config.historyLoaded();
 	}
 
 	/**
@@ -153,6 +155,7 @@ public class ManagerSession
 		{
 			config.sessionsJson(gson.toJson(arr));
 			config.currentSessionId(nullToEmpty(currentSessionId));
+			config.historyLoaded(historyLoaded);
 		}
 		catch (Exception e)
 		{
@@ -236,11 +239,27 @@ public class ManagerSession
 	}
 
 	/**
+	 * @return completed root sessions sorted by start time descending for the history picker.
+	 */
+	public List<Session> getHistorySessionsNewestFirst()
+	{
+		return sessions.values().stream()
+			.filter(session -> session.getMotherId() == null)
+			.filter(session -> !session.isActive())
+			.sorted(Comparator.comparing(Session::getStart).reversed())
+			.collect(Collectors.toList());
+	}
+
+	/**
 	 * Exit read-only history mode and return to live mode.
 	 * Persists the flag immediately.
 	 */
 	public void unloadHistory()
 	{
+		if (historyLoaded)
+		{
+			currentSessionId = null;
+		}
 		historyLoaded = false;
 		saveToConfig();
 	}
@@ -259,10 +278,11 @@ public class ManagerSession
 			return Optional.empty(); // must stop active first
 		}
 		Session s = sessions.get(sessionId);
-		if (s == null)
+		if (s == null || s.isActive())
 		{
 			return Optional.empty();
 		}
+		currentSessionId = s.getId();
 		historyLoaded = true;
 		saveToConfig();
 		return Optional.of(s);

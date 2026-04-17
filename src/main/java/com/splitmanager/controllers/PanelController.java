@@ -362,6 +362,44 @@ public class PanelController implements PanelActions
 	}
 
 	@Override
+	public void loadHistory(String sessionId)
+	{
+		if (sessionId == null || sessionId.isBlank())
+		{
+			toast(view, "Select a session from history.");
+			return;
+		}
+		if (sessionManager.hasActiveSession())
+		{
+			toast(view, "Stop the current session first.");
+			return;
+		}
+		if (sessionManager.loadHistory(sessionId).isPresent())
+		{
+			toast(view, "History loaded.");
+			managerPanel.refreshAllView();
+		}
+		else
+		{
+			toast(view, "Failed to load history.");
+		}
+		refreshAllView();
+	}
+
+	@Override
+	public void unloadHistory()
+	{
+		if (!sessionManager.isHistoryLoaded())
+		{
+			return;
+		}
+		sessionManager.unloadHistory();
+		toast(view, "History closed.");
+		managerPanel.refreshAllView();
+		refreshAllView();
+	}
+
+	@Override
 	public void onKnownPlayerSelectionChanged(String selected)
 	{
 		refreshAlts();
@@ -374,6 +412,7 @@ public class PanelController implements PanelActions
 		recomputeMetrics();
 		refreshSessionData();
 		refreshWaitlist();
+		refreshHistory();
 		refreshButtonStates();
 	}
 
@@ -567,6 +606,14 @@ public class PanelController implements PanelActions
 			)));
 	}
 
+	private void refreshHistory()
+	{
+		String selectedSessionId = sessionManager.isHistoryLoaded()
+			? sessionManager.getCurrentSession().map(Session::getId).orElse(null)
+			: view.getSelectedHistorySessionId();
+		view.setHistorySessions(sessionManager.getHistorySessionsNewestFirst(), selectedSessionId);
+	}
+
 	/**
 	 * Updates the enabled or disabled state of various buttons and fields in the user interface.
 	 * The button states are set based on the current session status, player selections, and
@@ -593,6 +640,12 @@ public class PanelController implements PanelActions
 
 		view.getBtnWaitlistAdd().setEnabled(!readOnly && hasActiveSession && waitlistRows > 0);
 		view.getBtnWaitlistDelete().setEnabled(waitlistRows > 0);
+
+		boolean hasHistory = view.getHistorySessionDropdown().getItemCount() > 0;
+		view.getHistorySessionDropdown().setEnabled(!hasActiveSession && hasHistory);
+		view.getBtnViewHistory().setEnabled(!hasActiveSession && hasHistory);
+		view.getBtnUnloadHistory().setEnabled(readOnly);
+		view.getRecentSplitsTable().setEnabled(!readOnly);
 	}
 
 	/**

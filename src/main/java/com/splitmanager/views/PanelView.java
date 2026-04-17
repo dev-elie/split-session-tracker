@@ -32,7 +32,12 @@ import java.awt.Insets;
 import java.awt.event.KeyEvent;
 import java.awt.datatransfer.StringSelection;
 import java.text.ParseException;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -94,6 +99,9 @@ public class PanelView extends PluginPanel
 	private final JButton btnAddKill = new JButton("Add");
 	private final JButton btnStart = new JButton("Start");
 	private final JButton btnStop = new JButton("Stop");
+	private final JComboBox<HistorySessionItem> historySessionDropdown = new JComboBox<>();
+	private final JButton btnViewHistory = new JButton("View");
+	private final JButton btnUnloadHistory = new JButton("Close");
 	private final JButton btnAddToSession = new JButton("Add");
 	private final JButton btnRemoveFromSession = new JButton("Remove");
 	private final JComboBox<String> currentSessionPlayerDropdown = new JComboBox<>();
@@ -112,6 +120,8 @@ public class PanelView extends PluginPanel
 	private JButton btnCopyJson;
 	private JButton btnCopyMd;
 	private DropdownRip detectedValuesDropdown;
+	private static final DateTimeFormatter HISTORY_TIME_FORMAT =
+		DateTimeFormatter.ofPattern("dd-MMM HH:mm", Locale.ENGLISH).withZone(ZoneId.systemDefault());
 
 	public PanelView(ManagerSession sessionManager, PluginConfig config, ManagerKnownPlayers playerManager, PanelController controller)
 	{
@@ -222,6 +232,8 @@ public class PanelView extends PluginPanel
 		top.add(Box.createVerticalStrut(3));
 		top.add(generateKnownPlayersManagement());
 		top.add(Box.createVerticalStrut(3));
+		top.add(generateHistoryPanel());
+		top.add(Box.createVerticalStrut(3));
 
 		add(top, BorderLayout.NORTH);
 	}
@@ -270,6 +282,8 @@ public class PanelView extends PluginPanel
 
 		btnWaitlistAdd.addActionListener(e -> actions.applySelectedPendingValue(waitlistTable.getSelectedRow()));
 		btnWaitlistDelete.addActionListener(e -> actions.deleteSelectedPendingValue(waitlistTable.getSelectedRow()));
+		btnViewHistory.addActionListener(e -> actions.loadHistory(getSelectedHistorySessionId()));
+		btnUnloadHistory.addActionListener(e -> actions.unloadHistory());
 		waitlistTable.addMouseListener(new java.awt.event.MouseAdapter()
 		{
 			@Override
@@ -379,6 +393,49 @@ public class PanelView extends PluginPanel
 	public void gotoStep(int step)
 	{
 		tour.gotoStep(step);
+	}
+
+	public void setHistorySessions(List<Session> sessions, String selectedSessionId)
+	{
+		String selected = selectedSessionId;
+		if (selected == null)
+		{
+			selected = getSelectedHistorySessionId();
+		}
+
+		DefaultComboBoxModel<HistorySessionItem> model = new DefaultComboBoxModel<>();
+		if (sessions != null)
+		{
+			for (Session session : sessions)
+			{
+				model.addElement(HistorySessionItem.from(session));
+			}
+		}
+		historySessionDropdown.setModel(model);
+
+		if (selected == null)
+		{
+			return;
+		}
+		for (int i = 0; i < model.getSize(); i++)
+		{
+			HistorySessionItem item = model.getElementAt(i);
+			if (selected.equals(item.getSessionId()))
+			{
+				historySessionDropdown.setSelectedIndex(i);
+				return;
+			}
+		}
+	}
+
+	public String getSelectedHistorySessionId()
+	{
+		Object selected = historySessionDropdown.getSelectedItem();
+		if (selected instanceof HistorySessionItem)
+		{
+			return ((HistorySessionItem) selected).getSessionId();
+		}
+		return null;
 	}
 
 	private JTable makeRecentSplitsTable(RecentSplitsTable model)
@@ -861,6 +918,42 @@ public class PanelView extends PluginPanel
 		return new DropdownRip("Recent splits", scroller, config.enableTour(), tooltip);
 	}
 
+	private JComponent generateHistoryPanel()
+	{
+		JPanel historyPanel = new JPanel(new GridBagLayout());
+		GridBagConstraints gbc = new GridBagConstraints();
+		gbc.insets = inset;
+		gbc.anchor = GridBagConstraints.WEST;
+		gbc.fill = GridBagConstraints.HORIZONTAL;
+
+		JLabel sessionLabel = new JLabel("Session:");
+		sessionLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+		gbc.gridx = 0;
+		gbc.gridy = 0;
+		gbc.weightx = 0.0;
+		gbc.fill = GridBagConstraints.NONE;
+		historyPanel.add(sessionLabel, gbc);
+
+		historySessionDropdown.setPrototypeDisplayValue(new HistorySessionItem("", "14-Jan 15:00 - 8.5h long"));
+		gbc.gridx = 1;
+		gbc.gridy = 0;
+		gbc.weightx = 1.0;
+		gbc.fill = GridBagConstraints.HORIZONTAL;
+		historyPanel.add(historySessionDropdown, gbc);
+
+		JPanel buttons = new JPanel(new GridLayout(1, 2, 6, 0));
+		buttons.add(btnViewHistory);
+		buttons.add(btnUnloadHistory);
+		gbc.gridx = 0;
+		gbc.gridy = 1;
+		gbc.gridwidth = 2;
+		gbc.weightx = 1.0;
+		historyPanel.add(buttons, gbc);
+
+		return new DropdownRip("View history", historyPanel, false,
+			"Load a stopped session in read-only mode. Close history to start a new session.");
+	}
+
 	private JComponent generateMetrics()
 	{
 		JPanel wrapper = new JPanel(new BorderLayout(0, 6));
@@ -1117,5 +1210,61 @@ public class PanelView extends PluginPanel
 				sessionManager.getCurrentSession().orElse(null), true), config);
 		StringSelection selection = new StringSelection(payload);
 		java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+	}
+
+	private static final class HistorySessionItem
+	{
+		private final String sessionId;
+		private final String label;
+
+		private HistorySessionItem(String sessionId, String label)
+		{
+			this.sessionId = sessionId;
+			this.label = label;
+		}
+
+		private static HistorySessionItem from(Session session)
+		{
+			if (session == null)
+			{
+				return new HistorySessionItem("", "");
+			}
+			Instant start = session.getStart();
+			String label = start == null
+				? "Unknown start"
+				: HISTORY_TIME_FORMAT.format(start);
+			if (session.getEnd() != null)
+			{
+				label += " - " + formatDuration(start, session.getEnd()) + " long";
+			}
+			return new HistorySessionItem(session.getId(), label);
+		}
+
+		private static String formatDuration(Instant start, Instant end)
+		{
+			if (start == null || end == null)
+			{
+				return "unknown";
+			}
+			long seconds = Math.max(0L, Duration.between(start, end).getSeconds());
+			double hours = seconds / 3600.0d;
+			String value = String.format(Locale.ENGLISH, "%.1f", hours);
+			if (value.endsWith(".0"))
+			{
+				value = value.substring(0, value.length() - 2);
+			}
+			return value + "h";
+		}
+
+		private String getSessionId()
+		{
+			return sessionId;
+		}
+
+		@Override
+		public String toString()
+		{
+			return label;
+		}
 	}
 }

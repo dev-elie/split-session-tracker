@@ -65,6 +65,7 @@ public final class PanelTour
 		if (panel == null)
 		{
 			panel = buildPanel();
+			updateUi(); // Ensure the UI is updated once the panel field is set
 		}
 		return panel;
 	}
@@ -83,6 +84,11 @@ public final class PanelTour
 		step = 0;
 		clearHighlight();
 		updateUi();
+		if (panel != null)
+		{
+			panel.revalidate();
+			panel.repaint();
+		}
 	}
 
 	public void endTourAndDisable()
@@ -172,6 +178,7 @@ public final class PanelTour
 
 		JPanel buttonRow1 = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 5));
 		buttonRow1.add(startButton);
+		buttonRow1.add(endButton);
 
 		JPanel buttonRow2 = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
 		buttonRow2.add(prevButton);
@@ -188,7 +195,6 @@ public final class PanelTour
 		tourPanel.add(left, BorderLayout.CENTER);
 		tourPanel.add(right, BorderLayout.SOUTH);
 
-		updateUi();
 		return tourPanel;
 	}
 
@@ -206,10 +212,15 @@ public final class PanelTour
 	private void updateUi()
 	{
 		boolean enabled = config.enableTour();
-		boolean show = enabled || running;
+		boolean show = running || enabled;
 		if (panel != null)
 		{
 			panel.setVisible(show);
+			if (panel.getParent() != null)
+			{
+				panel.getParent().revalidate();
+				panel.getParent().repaint();
+			}
 		}
 		if (text != null)
 		{
@@ -232,7 +243,7 @@ public final class PanelTour
 		}
 		if (endButton != null)
 		{
-			endButton.setVisible(running);
+			endButton.setVisible(true);
 		}
 	}
 

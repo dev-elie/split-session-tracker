@@ -343,10 +343,12 @@ public class ManagerSessionTest
 		Optional<Session> loaded = managerSession.loadHistory("archived");
 		assertTrue(loaded.isPresent());
 		assertTrue(managerSession.isHistoryLoaded());
+		assertEquals("archived", managerSession.getCurrentSession().get().getId());
 		assertFalse(managerSession.startSession().isPresent());
 
 		managerSession.unloadHistory();
 		assertFalse(managerSession.isHistoryLoaded());
+		assertFalse(managerSession.getCurrentSession().isPresent());
 	}
 
 	@Test
