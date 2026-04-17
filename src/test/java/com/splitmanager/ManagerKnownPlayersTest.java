@@ -5,20 +5,18 @@ import com.splitmanager.utils.InstantTypeAdapter;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnitRunner;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.junit.Assert.fail;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Mock;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.junit.MockitoJUnitRunner;
 
 @RunWith(MockitoJUnitRunner.class)
 public class ManagerKnownPlayersTest
@@ -47,6 +45,7 @@ public class ManagerKnownPlayersTest
 		assertTrue(added);
 		assertTrue(playerManager.getKnownPlayers().contains(p1));
 		assertFalse(playerManager.addKnownPlayer("Player1"));
+		assertFalse(playerManager.addKnownPlayer("player1"));
 		verify(config).knownPlayersCsv(p1);
 	}
 
@@ -55,7 +54,7 @@ public class ManagerKnownPlayersTest
 	{
 		String p1 = "Player1";
 		playerManager.addKnownPlayer(p1);
-		
+
 		boolean removed = playerManager.removeKnownPlayer(p1);
 		assertTrue(removed);
 		assertFalse(playerManager.getKnownPlayers().contains(p1));
@@ -105,7 +104,7 @@ public class ManagerKnownPlayersTest
 	{
 		// Mapping: Alt1 -> Main
 		playerManager.trySetAltMain("Alt1", "Main");
-		
+
 		assertEquals("Main", playerManager.getMainName("Alt1"));
 		assertEquals("Main", playerManager.getMainName("Main"));
 		assertEquals("Unknown", playerManager.getMainName("Unknown"));
@@ -239,5 +238,25 @@ public class ManagerKnownPlayersTest
 		assertFalse(playerManager.removeKnownPlayer(null));
 		assertFalse(playerManager.removeKnownPlayer(" "));
 		assertFalse(playerManager.removeKnownPlayer("Missing"));
+	}
+
+	@Test
+	public void testKnownPlayerViewsAreReadOnlyAndNullSafe()
+	{
+		assertFalse(playerManager.addKnownPlayer(null));
+		assertFalse(playerManager.addKnownPlayer(" "));
+		assertFalse(playerManager.isKnownPlayer(null));
+		assertEquals(null, playerManager.getMainName(null));
+
+		playerManager.addKnownPlayer("Player1");
+		try
+		{
+			playerManager.getKnownPlayers().add("Player2");
+			fail("Known player view should be read-only");
+		}
+		catch (UnsupportedOperationException expected)
+		{
+			assertTrue(true);
+		}
 	}
 }

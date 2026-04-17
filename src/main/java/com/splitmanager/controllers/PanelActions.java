@@ -98,10 +98,6 @@ public interface PanelActions
 
 	void recomputeMetricsForSession(String sessionId);
 
-	void altPlayerManageAddPlayer(String player);
-
-	void altPlayerManageRemovePlayer(String player);
-
 	/**
 	 * Copy metrics to clipboard in JSON.
 	 */

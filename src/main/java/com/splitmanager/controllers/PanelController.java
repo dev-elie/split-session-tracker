@@ -38,7 +38,6 @@ public class PanelController implements PanelActions
 	private final ManagerPanel managerPanel;
 	@Setter
 	private PanelView view;
-	private Formats.OsrsAmountFormatter formats;
 
 	public PanelController(ManagerSession sessionManager, PluginConfig config, ManagerKnownPlayers playerManager, ManagerPanel managerPanel)
 	{
@@ -46,7 +45,6 @@ public class PanelController implements PanelActions
 		this.playerManager = playerManager;
 		this.config = config;
 		this.managerPanel = managerPanel;
-		this.formats = new Formats.OsrsAmountFormatter();
 	}
 
 	@Override
@@ -75,7 +73,16 @@ public class PanelController implements PanelActions
 			toast(view, "Cannot stop while history loaded.");
 			return;
 		}
-		if (sessionManager.stopSession(view))
+		int res = JOptionPane.showConfirmDialog(view,
+			"Are you sure you want to stop the session?",
+			"Confirm stop",
+			JOptionPane.YES_NO_OPTION,
+			JOptionPane.WARNING_MESSAGE);
+		if (res != JOptionPane.YES_OPTION)
+		{
+			return;
+		}
+		if (sessionManager.stopSession())
 		{
 			managerPanel.refreshAllView();
 		}
@@ -191,16 +198,20 @@ public class PanelController implements PanelActions
 		long amt;
 		try
 		{
-			log.debug("Adding kill for1  {} with amount {}", player, val);
-			//amt = Formats.OsrsAmountFormatter.stringAmountToLongAmount(val,config);
-			//log.debug("Adding kill for2  {} with amount {}", player, amt);
-			amt = Long.parseLong(val);
-			log.debug("Adding kill for3  {} with amount {}", player, amt);
-			// amt = Long.parseLong(val); TODO?????
+			if (rawValue instanceof Number)
+			{
+				amt = ((Number) rawValue).longValue();
+			}
+			else
+			{
+				amt = Formats.OsrsAmountFormatter.stringAmountToLongAmount(val, config);
+			}
+			log.debug("Adding kill for {} with amount {}", player, amt);
 			addKill(player, amt);
 		}
 		catch (Exception ex)
 		{
+			log.warn("Invalid kill amount {}", val, ex);
 			toast(view, "Invalid amount.");
 		}
 	}
@@ -406,18 +417,6 @@ public class PanelController implements PanelActions
 	}
 
 	@Override
-	public void altPlayerManageAddPlayer(String player)
-	{
-		//TODO remove
-	}
-
-	@Override
-	public void altPlayerManageRemovePlayer(String player)
-	{
-		//TODO remove
-	}
-
-	@Override
 	public void copyMetricsJson()
 	{
 		String payload = MarkdownFormatter.buildMetricsJson(sessionManager);
@@ -461,8 +460,9 @@ public class PanelController implements PanelActions
 		{
 			config.enableTour(false);
 		}
-		catch (Throwable ignored)
+		catch (RuntimeException e)
 		{
+			log.warn("Failed to persist tour disabled state", e);
 		}
 		view.endTour();
 	}

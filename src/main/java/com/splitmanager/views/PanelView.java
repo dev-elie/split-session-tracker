@@ -1090,8 +1090,8 @@ public class PanelView extends PluginPanel
 		String explanation = direct
 			? "Direct payments mode: negatives pay positives directly. We'll suggest who pays whom below."
 			: (config.flipSettlementSign()
-			? "Middleman mode (flipped): positive Split means you pay the bank; negative means the bank pays you."
-			: "Middleman mode: negative Split means you pay the bank; positive means the bank pays you.");
+			   ? "Middleman mode (flipped): positive Split means you pay the bank; negative means the bank pays you."
+			   : "Middleman mode: negative Split means you pay the bank; positive means the bank pays you.");
 		JTextArea desc = new JTextArea(explanation);
 		desc.setEditable(false);
 		desc.setLineWrap(true);
@@ -1159,8 +1159,8 @@ public class PanelView extends PluginPanel
 		{
 			@Override
 			public java.awt.Component getTableCellRendererComponent(JTable table, Object value,
-																	boolean isSelected, boolean hasFocus,
-																	int row, int column)
+			                                                        boolean isSelected, boolean hasFocus,
+			                                                        int row, int column)
 			{
 				java.awt.Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
 				Metrics model = (Metrics) table.getModel();
@@ -1193,8 +1193,8 @@ public class PanelView extends PluginPanel
 		{
 			@Override
 			public java.awt.Component getTableCellRendererComponent(JTable table, Object value,
-																	boolean isSelected, boolean hasFocus,
-																	int row, int column)
+			                                                        boolean isSelected, boolean hasFocus,
+			                                                        int row, int column)
 			{
 				Metrics model = (Metrics) table.getModel();
 				boolean active = model.isRowActive(row);

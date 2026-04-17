@@ -1,14 +1,17 @@
 package com.splitmanager;
 
 import com.google.inject.Provides;
+import com.splitmanager.chat.ChatDetectionService;
+import com.splitmanager.chat.ChatSource;
 import com.splitmanager.models.PendingValue;
 import com.splitmanager.models.Session;
 import com.splitmanager.utils.ChatStatusOverlay;
 import com.splitmanager.utils.Formats;
 import com.splitmanager.views.PanelView;
 import java.awt.image.BufferedImage;
-import java.text.ParseException;
 import java.util.Arrays;
+import java.util.List;
+import java.util.regex.Pattern;
 import javax.inject.Inject;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -49,8 +52,9 @@ import net.runelite.client.util.Text;
 public class ManagerPlugin extends Plugin
 {
 	private static final BufferedImage ICON = ImageUtil.loadImageResource(ManagerPlugin.class, "/com/splitmanager/icons/icon.png");
-	@Getter
-	private static ManagerPanel panel;
+	private static final Pattern CHAT_LEAVE_OR_KICK = Pattern.compile("(?i)^\\s*(?:you\\s+(?:have\\s+)?left\\s+(?:the\\s+)?(?:chat-)?channel\\.?|you\\s+(?:are|aren't|are\\s+not)\\s+currently\\s+in\\s+(?:a|the|your)\\s+(?:chat-)?channel\\.?|you\\s+have\\s+been\\s+kicked\\s+from\\s+the\\s+channel\\.?)\\s*$");
+	private static final Pattern CHAT_JOIN = Pattern.compile("(?i)^\\s*now\\s+talking\\s+in\\s+(?:the\\s+)?(?:chat-)?channel\\.?\\s*$");
+	private final ChatDetectionService chatDetectionService = new ChatDetectionService();
 	@Inject
 	private Client client;
 	@Inject
@@ -84,9 +88,6 @@ public class ManagerPlugin extends Plugin
 		playerManager.init();
 		sessionManager.init();
 		panelManager.init();
-
-		// TODO create an icon
-
 
 		chatOverlay = new ChatStatusOverlay();
 		overlayManager.add(chatOverlay);
@@ -203,14 +204,17 @@ public class ManagerPlugin extends Plugin
 	 * Parse chat messages to detect values and enqueue PendingValue suggestions.
 	 *
 	 * @param event chat message event
-	 * @throws ParseException when number parsing fails
 	 */
 	@Subscribe
-	public void onChatMessage(ChatMessage event) throws ParseException
+	public void onChatMessage(ChatMessage event)
 	{
+		if (event == null)
+		{
+			return;
+		}
 
 		// Disabled for now, this should be covered by other checks
-		if (CheckChatJoinLeave(event))
+		if (checkChatJoinLeave(event))
 		{
 			return;
 		}
@@ -220,136 +224,72 @@ public class ManagerPlugin extends Plugin
 			return;
 		}
 
-		Formats.OsrsAmountFormatter f = new Formats.OsrsAmountFormatter();
 		ChatMessageType type = event.getType();
-		String tname = type.name();
+		ChatSource source = getChatSource(type);
 
-		boolean isClan = tname.contains("CLAN");
-		boolean isFriends = tname.contains("FRIEND");
-
-		if (isClan && !config.detectInClanChat())
+		if (source == null)
 		{
 			return;
 		}
-		if (isFriends && !config.detectInFriendsChat())
+		if (source == ChatSource.CLAN && !config.detectInClanChat())
 		{
 			return;
 		}
-		if (!isClan && !isFriends)
+		if (source == ChatSource.FRIENDS && !config.detectInFriendsChat())
 		{
 			return;
 		}
 
-		String msg = event.getMessage();
-
-		// Try parse PvM drop
-		if (config.detectPvmValues())
+		List<PendingValue> pendingValues = chatDetectionService.detect(config, source, event.getName(), event.getMessage());
+		for (PendingValue pendingValue : pendingValues)
 		{
-			java.util.regex.Matcher m = java.util.regex.Pattern.compile("^(.+?) received a drop: .*?\\((\\d[\\d,]*) coins\\)").matcher(msg);
-			if (m.find())
-			{
-				String player = m.group(1);
-				Long value = (Long) f.stringToValue(m.group(2) + " coins");
-				queuePending(PendingValue.Type.PVM, isClan ? "Clan" : "Friends", msg, value, player);
-				return;
-			}
+			queuePending(pendingValue);
 		}
+	}
 
-		// Try parse PvP loot
-		if (config.detectPvpValues())
+	private ChatSource getChatSource(ChatMessageType type)
+	{
+		if (type == null)
 		{
-			java.util.regex.Matcher m = java.util.regex.Pattern.compile("^(.+?) has defeated (.+?) and received \\((\\d[\\d,]*) coins\\) worth of loot!").matcher(msg);
-			if (m.find())
-			{
-				String player = m.group(1);
-				Long value = (Long) f.stringToValue(m.group(3) + " coins");
-				queuePending(PendingValue.Type.PVP, isClan ? "Clan" : "Friends", msg, value, player);
-				return;
-			}
+			return null;
 		}
-
-		// Try parse player !add value
-		//TODO fix negative numbers
-		if (config.detectPlayerValues())
+		String typeName = type.name();
+		if (typeName.contains("CLAN"))
 		{
-			// Pattern to match a single value with k, m, or b unit only
-			String valuePattern = "([0-9][0-9,]*(?:\\.[0-9]+)?)\\s*([kmb])?";
-
-			// Pattern to match one or more values separated by spaces or commas
-			java.util.regex.Pattern multiValuePattern = java.util.regex.Pattern
-				.compile("(?i)!add\\s+(" + valuePattern + "(\\s*,?\\s*" + valuePattern + ")*)");
-
-			java.util.regex.Matcher multiMatcher = multiValuePattern.matcher(msg);
-
-			if (multiMatcher.find())
-			{
-				String sender = event.getName();
-				String who = sender.replaceAll("<[^>]*>", "");
-				String valuesText = multiMatcher.group(1);
-				String[] valueStrings = valuesText.split("\\s*,\\s*|\\s+");
-
-				for (String valueString : valueStrings)
-				{
-					java.util.regex.Matcher singleValueMatcher = java.util.regex.Pattern
-						.compile("(?i)(" + valuePattern + ")")
-						.matcher(valueString);
-
-					if (singleValueMatcher.find())
-					{
-						String numberTxt = singleValueMatcher.group(2);
-						String unitTxt = singleValueMatcher.group(3);
-						if (unitTxt == null)
-						{
-							unitTxt = config.defaultValueMultiplier().getValue();
-						}
-
-						// Combine the number and unit for parsing
-						String fullValueText = numberTxt + (unitTxt != null ? unitTxt : "");
-
-						try
-						{
-							Long value = (Long) f.stringToValue(fullValueText);
-							queuePending(PendingValue.Type.ADD, isClan ? "Clan" : "Friends",
-								"!add " + fullValueText, value, who);
-						}
-						catch (ParseException e)
-						{
-							// Skip invalid values
-							log.debug("Failed to parse value: " + fullValueText, e);
-						}
-					}
-				}
-			}
+			return ChatSource.CLAN;
 		}
+		if (typeName.contains("FRIEND"))
+		{
+			return ChatSource.FRIENDS;
+		}
+		return null;
 	}
 
 
 	/**
 	 * Enqueue a pending value suggestion for user approval.
 	 *
-	 * @param type            source type (PvM, PvP, player add)
-	 * @param source          chat source label
-	 * @param msg             original chat message
-	 * @param value           numeric value (coins or K)
-	 * @param suggestedPlayer prefilled player name when available
+	 * @param pendingValue pending value to add
 	 */
-	private void queuePending(PendingValue.Type type, String source, String msg, Long value, String suggestedPlayer)
+	private void queuePending(PendingValue pendingValue)
 	{
-		if (sessionManager == null)
+		if (sessionManager == null || pendingValue == null)
 		{
 			return;
 		}
-		PendingValue pv = PendingValue.of(type, source, msg, value, suggestedPlayer);
-		sessionManager.addPendingValue(pv);
+		sessionManager.addPendingValue(pendingValue);
 
 		panelManager.refreshAllView();
 	}
 
-	private boolean CheckChatJoinLeave(ChatMessage event)
+	private boolean checkChatJoinLeave(ChatMessage event)
 	{
+		if (event == null || event.getMessage() == null || event.getType() == null)
+		{
+			return false;
+		}
 
 		String plain = Text.removeTags(event.getMessage()).trim();
-		String lower = plain.toLowerCase();
 
 		ChatMessageType t = event.getType();
 		boolean isSystemish = t == ChatMessageType.GAMEMESSAGE
@@ -364,10 +304,7 @@ public class ManagerPlugin extends Plugin
 		}
 
 		//LEAVE/KICK Chat
-		if (java.util.regex.Pattern
-			.compile("(?i)^\\s*(?:you\\s+(?:have\\s+)?left\\s+(?:the\\s+)?(?:chat-)?channel\\.?|you\\s+(?:are|aren't|are\\s+not)\\s+currently\\s+in\\s+(?:a|the|your)\\s+(?:chat-)?channel\\.?|you\\s+have\\s+been\\s+kicked\\s+from\\s+the\\s+channel\\.?)\\s*$")
-			.matcher(plain)
-			.find())
+		if (CHAT_LEAVE_OR_KICK.matcher(plain).find())
 		{
 			updateChatWarningStatus();
 			return true;
@@ -375,10 +312,7 @@ public class ManagerPlugin extends Plugin
 
 
 		//JOIN Chat
-		if (java.util.regex.Pattern
-			.compile("(?i)^\\s*now\\s+talking\\s+in\\s+(?:the\\s+)?(?:chat-)?channel\\.?\\s*$")
-			.matcher(plain)
-			.find())
+		if (CHAT_JOIN.matcher(plain).find())
 		{
 			updateChatWarningStatus();
 			return false;
@@ -403,8 +337,7 @@ public class ManagerPlugin extends Plugin
 			return;
 		}
 
-		log.info("Updating chat overlay status");
-		log.info("{}", isFriendsChatOn());
+		log.debug("Updating chat overlay status; friends chat active={}", isFriendsChatOn());
 
 		if (isFriendsChatOn())
 		{
@@ -448,21 +381,19 @@ public class ManagerPlugin extends Plugin
 
 		if (currentSession == null)
 		{
-			String removeFromSession = "Add to known players";
+			String option = "Add to known players";
 
 			if (playerManager.isKnownPlayer(playername))
 			{
 				return;
 			}
-			// TODO Fix bug: For some reason this event/function triggers twice, so i have to check that the entry doesn't already exist' and i feel like i should not have to check this.
-			// This might be a janky mess but idc
-			if (Arrays.stream(client.getMenu().getMenuEntries()).anyMatch(e -> e.getOption().equals(removeFromSession)))
+			if (menuHasOption(option))
 			{
 				return;
 			}
 
 			client.getMenu().createMenuEntry(-1)
-				.setOption(removeFromSession)
+				.setOption(option)
 				.setTarget(event.getTarget())
 				.setType(MenuAction.RUNELITE)
 				.onClick(e ->
@@ -476,17 +407,15 @@ public class ManagerPlugin extends Plugin
 
 		if (sessionManager.currentSessionHasPlayer(playername))
 		{
-			String removeFromSession = "Remove from session";
+			String option = "Remove from session";
 
-			// TODO Fix bug: For some reason this event/function triggers twice, so i have to check that the entry doesn't already exist' and i feel like i should not have to check this.
-			// This might be a janky mess but idc
-			if (Arrays.stream(client.getMenu().getMenuEntries()).anyMatch(e -> e.getOption().equals(removeFromSession)))
+			if (menuHasOption(option))
 			{
 				return;
 			}
 
 			client.getMenu().createMenuEntry(-1)
-				.setOption(removeFromSession)
+				.setOption(option)
 				.setTarget(event.getTarget())
 				.setType(MenuAction.RUNELITE)
 				.onClick(e ->
@@ -497,17 +426,15 @@ public class ManagerPlugin extends Plugin
 			return;
 		}
 
-		String removeFromSession = "Add to session";
+		String option = "Add to session";
 
-		// TODO Fix bug: For some reason this event/function triggers twice, so i have to check that the entry doesn't already exist' and i feel like i should not have to check this.
-		// This might be a janky mess but idc
-		if (Arrays.stream(client.getMenu().getMenuEntries()).anyMatch(e -> e.getOption().equals(removeFromSession)))
+		if (menuHasOption(option))
 		{
 			return;
 		}
 
 		client.getMenu().createMenuEntry(-1)
-			.setOption(removeFromSession)
+			.setOption(option)
 			.setTarget(event.getTarget())
 			.setType(MenuAction.RUNELITE)
 			.onClick(e ->
@@ -518,6 +445,11 @@ public class ManagerPlugin extends Plugin
 				}
 				panelManager.refreshAllView();
 			});
+	}
+
+	private boolean menuHasOption(String option)
+	{
+		return Arrays.stream(client.getMenu().getMenuEntries()).anyMatch(e -> option.equals(e.getOption()));
 	}
 
 

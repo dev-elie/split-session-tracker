@@ -104,7 +104,6 @@ public class PaymentProcessor
 			long amt = Math.min(recvLeft, payLeft);
 			if (amt > 0)
 			{
-				// TODO verify if this is correct, right now i looks correct ish but the from and to are flipped
 				String from = payers.get(j).player;
 				String to = receivers.get(i).player;
 				out.add(new Transfer(from, to, amt));

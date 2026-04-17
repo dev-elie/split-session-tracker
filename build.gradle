@@ -28,7 +28,7 @@ dependencies {
 	testImplementation group: 'net.runelite', name:'jshell', version: runeLiteVersion
 }
 
-group = 'com.example'
+group = 'com.splitmanager'
 version = '1.0-SNAPSHOT'
 
 tasks.withType(JavaCompile).configureEach {
@@ -86,6 +86,14 @@ jacocoTestCoverageVerification {
 }
 
 check.dependsOn jacocoTestCoverageVerification
+
+tasks.register('run', JavaExec) {
+	group = 'runelite'
+	description = 'Run RuneLite with Auto Split Manager loaded in developer mode.'
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass.set('com.example.ExamplePluginTest')
+	args '--developer-mode', '--debug'
+}
 
 tasks.register('shadowJar', Jar) {
 	dependsOn configurations.testRuntimeClasspath

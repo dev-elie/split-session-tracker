@@ -5,33 +5,28 @@ import com.splitmanager.models.Kill;
 import com.splitmanager.models.PendingValue;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.Session;
-import com.splitmanager.views.PanelView;
 import com.splitmanager.utils.InstantTypeAdapter;
 import java.time.Instant;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnitRunner;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.ArgumentMatchers.any;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
 import static org.mockito.ArgumentMatchers.anyString;
+import org.mockito.Mock;
 import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.junit.MockitoJUnitRunner;
 
 @RunWith(MockitoJUnitRunner.class)
 public class ManagerSessionTest
@@ -83,11 +78,8 @@ public class ManagerSessionTest
 		managerSession.startSession();
 		assertTrue(managerSession.hasActiveSession());
 
-		PanelView mockView = mock(PanelView.class);
-		// Mock JOptionPane is hard, but stopSession uses it.
-		// Since we can't easily mock static JOptionPane, we might need to refactor or just accept it's hard to test fully here.
-		// However, in a headless test environment, JOptionPane might throw an exception or return a default.
-		// Let's see if we can at least test the logic if we didn't have the dialog.
+		assertTrue(managerSession.stopSession());
+		assertFalse(managerSession.hasActiveSession());
 	}
 
 	@Test
@@ -107,7 +99,6 @@ public class ManagerSessionTest
 	{
 		PendingValue pv = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 100", 100000L, "Player1");
 		when(playerManager.getMainName("Player1")).thenReturn("Player1");
-		when(playerManager.getKnownPlayers()).thenReturn(new HashSet<>());
 
 		managerSession.addPendingValue(pv);
 
@@ -124,7 +115,6 @@ public class ManagerSessionTest
 		managerSession.addPlayerToActive(playerName);
 
 		PendingValue pv = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 100", 100000L, playerName);
-		when(playerManager.getKnownPlayers()).thenReturn(new HashSet<>());
 		managerSession.addPendingValue(pv);
 
 		boolean applied = managerSession.applyPendingValueToPlayer(pv.getId(), playerName);
@@ -279,6 +269,7 @@ public class ManagerSessionTest
 		assertEquals(170000L, (long) fm3.split);
 		assertTrue(fm3.activePlayer);
 	}
+
 	@Test
 	public void testRemovePlayerFromSession()
 	{
@@ -309,7 +300,7 @@ public class ManagerSessionTest
 		verify(config, atLeastOnce()).sessionsJson(anyString());
 
 		when(config.sessionsJson()).thenReturn(gson.toJson(managerSession.getAllSessionsNewestFirst()));
-		
+
 		ManagerSession newManager = new ManagerSession(config, playerManager, pluginManager, gson);
 		newManager.loadFromConfig();
 
@@ -363,7 +354,6 @@ public class ManagerSessionTest
 	{
 		managerSession.startSession();
 		when(playerManager.getMainName("AltPlayer")).thenReturn("MainPlayer");
-		when(playerManager.isAlt("AltPlayer")).thenReturn(true);
 
 		assertTrue(managerSession.addPlayerToActive("AltPlayer"));
 
@@ -389,8 +379,8 @@ public class ManagerSessionTest
 		resolveToSelf(p1);
 		assertTrue(managerSession.addPlayerToActive(p1));
 		assertTrue(managerSession.addKill(p1, 42L));
+		assertFalse(managerSession.addKill(p1, null));
 
-		when(playerManager.getMainName("")).thenReturn("");
 		assertFalse(managerSession.addKill(" ", 42L));
 	}
 
@@ -402,7 +392,6 @@ public class ManagerSessionTest
 		resolveToSelf(p1);
 		managerSession.addPlayerToActive(p1);
 		when(config.autoApplyWhenInSession()).thenReturn(true);
-		when(playerManager.getKnownPlayers()).thenReturn(new LinkedHashSet<>(Collections.singleton(p1)));
 
 		PendingValue pv = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 50", 50000L, p1);
 		managerSession.addPendingValue(pv);
@@ -416,17 +405,36 @@ public class ManagerSessionTest
 	public void testPendingValuesCanBeRemovedAndAreCapped()
 	{
 		when(playerManager.getMainName(anyString())).thenAnswer(invocation -> invocation.getArgument(0));
-		when(playerManager.getKnownPlayers()).thenReturn(new LinkedHashSet<>());
 
 		for (int i = 0; i < 102; i++)
 		{
 			managerSession.addPendingValue(PendingValue.of(PendingValue.Type.ADD, "Clan", "!add " + i, (long) i, "P" + i));
 		}
 
-		assertEquals(101, managerSession.getPendingValues().size());
+		assertEquals(100, managerSession.getPendingValues().size());
 		String id = managerSession.getPendingValues().get(0).getId();
 		assertTrue(managerSession.removePendingValueById(id));
 		assertFalse(managerSession.removePendingValueById(id));
+	}
+
+	@Test
+	public void testSessionHasPlayerHandlesNulls()
+	{
+		assertFalse(managerSession.sessionHasPlayer(null, null));
+		managerSession.startSession();
+		assertFalse(managerSession.sessionHasPlayer(null, managerSession.getCurrentSession().get()));
+	}
+
+	@Test
+	public void testLoadFromConfigHandlesInvalidJson()
+	{
+		when(config.sessionsJson()).thenReturn("{not valid json");
+		when(config.currentSessionId()).thenReturn("missing");
+
+		managerSession.loadFromConfig();
+
+		assertTrue(managerSession.getAllSessionsNewestFirst().isEmpty());
+		assertTrue(managerSession.getCurrentSession().isEmpty());
 	}
 
 	@Test

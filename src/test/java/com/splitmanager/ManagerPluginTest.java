@@ -1,27 +1,22 @@
 package com.splitmanager;
 
 import com.splitmanager.models.PendingValue;
-import java.text.ParseException;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.events.ChatMessage;
+import static org.junit.Assert.assertEquals;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
+import static org.mockito.ArgumentMatchers.any;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnitRunner;
-
-import static org.junit.Assert.assertEquals;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.junit.MockitoJUnitRunner;
 
 @RunWith(MockitoJUnitRunner.class)
 public class ManagerPluginTest
@@ -57,7 +52,7 @@ public class ManagerPluginTest
 	}
 
 	@Test
-	public void testAddFlowSingleValue() throws ParseException
+	public void testAddFlowSingleValue()
 	{
 		ChatMessage chatMessage = new ChatMessage();
 		chatMessage.setType(ChatMessageType.CLAN_CHAT);
@@ -76,7 +71,7 @@ public class ManagerPluginTest
 	}
 
 	@Test
-	public void testAddFlowMultipleValues() throws ParseException
+	public void testAddFlowMultipleValues()
 	{
 		ChatMessage chatMessage = new ChatMessage();
 		chatMessage.setType(ChatMessageType.CLAN_CHAT);
@@ -99,7 +94,7 @@ public class ManagerPluginTest
 	}
 
 	@Test
-	public void testAddFlowDisabled() throws ParseException
+	public void testAddFlowDisabled()
 	{
 		when(config.detectPlayerValues()).thenReturn(false);
 
@@ -114,7 +109,7 @@ public class ManagerPluginTest
 	}
 
 	@Test
-	public void testAddFlowFriendsChat() throws ParseException
+	public void testAddFlowFriendsChat()
 	{
 		ChatMessage chatMessage = new ChatMessage();
 		chatMessage.setType(ChatMessageType.FRIENDSCHAT);
@@ -133,7 +128,7 @@ public class ManagerPluginTest
 	}
 
 	@Test
-	public void testPvmDropDetection() throws ParseException
+	public void testPvmDropDetection()
 	{
 		ChatMessage chatMessage = new ChatMessage();
 		chatMessage.setType(ChatMessageType.CLAN_CHAT);
@@ -153,7 +148,7 @@ public class ManagerPluginTest
 	}
 
 	@Test
-	public void testPvpLootDetection() throws ParseException
+	public void testPvpLootDetection()
 	{
 		ChatMessage chatMessage = new ChatMessage();
 		chatMessage.setType(ChatMessageType.FRIENDSCHAT);
@@ -173,7 +168,7 @@ public class ManagerPluginTest
 	}
 
 	@Test
-	public void testChatDetectionRespectsChannelToggles() throws ParseException
+	public void testChatDetectionRespectsChannelToggles()
 	{
 		when(config.detectInClanChat()).thenReturn(false);
 		ChatMessage clanMessage = new ChatMessage();
@@ -197,7 +192,7 @@ public class ManagerPluginTest
 	}
 
 	@Test
-	public void testChatDetectionIgnoresNonClanAndNonFriendsMessages() throws ParseException
+	public void testChatDetectionIgnoresNonClanAndNonFriendsMessages()
 	{
 		ChatMessage chatMessage = new ChatMessage();
 		chatMessage.setType(ChatMessageType.PUBLICCHAT);

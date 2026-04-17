@@ -7,16 +7,15 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnitRunner;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Mock;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import org.mockito.junit.MockitoJUnitRunner;
 
 @RunWith(MockitoJUnitRunner.class)
 public class MarkdownFormatterTest
@@ -28,14 +27,14 @@ public class MarkdownFormatterTest
 	public void testBuildMetricsMarkdownWithDirectPayments()
 	{
 		when(config.directPayments()).thenReturn(true);
-		
+
 		// P1 has 200k, P2 has 0k. P1 split balance: -100k. P2 split balance: +100k.
 		PlayerMetrics m1 = new PlayerMetrics("P1", 200000L, -100000L, true);
 		PlayerMetrics m2 = new PlayerMetrics("P2", 0L, 100000L, true);
 		List<PlayerMetrics> data = Arrays.asList(m1, m2);
 
 		String markdown = MarkdownFormatter.buildMetricsMarkdown(data, config);
-		
+
 		// Should contain settlement instructions: P1 (debtor) pays P2 (creditor)
 		assertTrue(markdown.contains("Suggested direct payments:"));
 		assertTrue(markdown.contains("P1 -> P2: 100,000"));
@@ -45,13 +44,13 @@ public class MarkdownFormatterTest
 	public void testBuildMetricsMarkdownWithoutDirectPayments()
 	{
 		when(config.directPayments()).thenReturn(false);
-		
+
 		PlayerMetrics m1 = new PlayerMetrics("P1", 200000L, -100000L, true);
 		PlayerMetrics m2 = new PlayerMetrics("P2", 0L, 100000L, true);
 		List<PlayerMetrics> data = Arrays.asList(m1, m2);
 
 		String markdown = MarkdownFormatter.buildMetricsMarkdown(data, config);
-		
+
 		// Should NOT contain settlement instructions
 		assertFalse(markdown.contains("Suggested direct payments:"));
 		assertFalse(markdown.contains("P1 -> P2: 100,000"));

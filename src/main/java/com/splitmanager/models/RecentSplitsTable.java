@@ -49,11 +49,11 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 				return e.kill.getPlayer();
 			case 2:
 				String t = e.kill.getType();
-				if ("JOINED".equalsIgnoreCase(t))
+				if (Kill.TYPE_JOINED.equalsIgnoreCase(t))
 				{
 					return "Joined";
 				}
-				if ("LEFT".equalsIgnoreCase(t))
+				if (Kill.TYPE_LEFT.equalsIgnoreCase(t))
 				{
 					return "Left";
 				}
@@ -81,8 +81,7 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 		// Disable editing for JOINED/LEFT rows
 		if (rowIndex >= 0 && rowIndex < rows.size())
 		{
-			String t = rows.get(rowIndex).kill.getType();
-			if (t != null && (t.equalsIgnoreCase("JOINED") || t.equalsIgnoreCase("LEFT")))
+			if (rows.get(rowIndex).kill.isRosterEvent())
 			{
 				return false;
 			}
@@ -113,9 +112,9 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 				Long k = Formats.OsrsAmountFormatter.stringAmountToLongAmount((String) aValue, config);
 				e.kill.setAmount(k);
 			}
-			catch (Exception ignored)
+			catch (Exception ex)
 			{
-				log.warn("Invalid amount: {}", aValue);
+				log.warn("Invalid amount: {}", aValue, ex);
 			}
 		}
 		fireTableRowsUpdated(rowIndex, rowIndex);

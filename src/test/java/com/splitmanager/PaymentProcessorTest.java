@@ -6,10 +6,9 @@ import com.splitmanager.utils.PaymentProcessor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import org.junit.Test;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import org.junit.Test;
 
 public class PaymentProcessorTest
 {
@@ -99,14 +98,14 @@ public class PaymentProcessorTest
 		List<PlayerMetrics> data = Arrays.asList(m1, m2, m3, m4);
 
 		List<String> results = PaymentProcessor.computeDirectPayments(data);
-		
+
 		// Sorted Payers: P1 (-150k), P2 (-50k)
 		// Sorted Receivers: P3 (+120k), P4 (+80k)
-		
+
 		// 1. P1 pays P3: 120k (P3 finished, P1 left with 30k debt)
 		// 2. P1 pays P4: 30k (P1 finished, P4 left with 50k credit)
 		// 3. P2 pays P4: 50k (P4 finished, P2 finished)
-		
+
 		assertEquals(3, results.size());
 		assertEquals("P1 -> P3: 120,000", results.get(0));
 		assertEquals("P1 -> P4: 30,000", results.get(1));

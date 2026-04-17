@@ -5,8 +5,8 @@ import com.splitmanager.models.Kill;
 import com.splitmanager.models.PendingValue;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.Session;
+import com.splitmanager.sessions.SplitCalculator;
 import com.splitmanager.utils.InstantTypeAdapter;
-import com.splitmanager.views.PanelView;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -15,22 +15,21 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import javax.annotation.Nonnull;
 import javax.inject.Inject;
 import javax.inject.Singleton;
-import javax.swing.JOptionPane;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Manages sessions, persistence, and all the logic for roster changes,
  * child sessions, and live split calculations.
  */
 @Singleton
+@Slf4j
 public class ManagerSession
 {
 	private final Gson gson;
@@ -38,11 +37,11 @@ public class ManagerSession
 	private final List<PendingValue> pendingValues = new ArrayList<>();
 	private final ManagerKnownPlayers playerManager;
 	private final PluginConfig config;
+	private final ManagerPlugin pluginManager;
+	private final SplitCalculator splitCalculator;
 	// Cache of all kills grouped by mother session id to avoid recomputing on every UI refresh
 	private final Map<String, List<Kill>> motherKillsCache = new LinkedHashMap<>();
 	private String currentSessionId;
-	private ManagerPlugin pluginManager;
-	// TODO implement in newer versions
 	@Getter
 	private boolean historyLoaded;
 
@@ -62,6 +61,7 @@ public class ManagerSession
 			.registerTypeAdapter(Instant.class, new InstantTypeAdapter())
 			.create();
 		this.pluginManager = pluginManager;
+		this.splitCalculator = new SplitCalculator();
 	}
 
 	/**
@@ -80,28 +80,31 @@ public class ManagerSession
 		return s == null || s.isEmpty() ? null : s;
 	}
 
-	// TODO add export all/ or specific session to json
+	private String resolveMainName(String player)
+	{
+		if (player == null)
+		{
+			return null;
+		}
+		String trimmed = player.trim();
+		if (trimmed.isEmpty())
+		{
+			return null;
+		}
+		return playerManager.getMainName(trimmed);
+	}
 
 	/**
 	 * Loads configuration data into the application's runtime structures.
 	 * <p>
 	 * This method performs the following operations:
 	 * <p>
-	 * 1. Clears the list of known players and repopulates it from a CSV string
-	 * retrieved from the configuration. Each player is trimmed of extraneous
-	 * whitespace before being added to the collection.
-	 * <p>
-	 * 2. Clears the mapping of alternate accounts to main accounts and repopulates
-	 * it from a JSON structure retrieved from the configuration. The JSON is
-	 * parsed into a Map using GSON. If the parsing fails or the structure is
-	 * invalid, the operation is gracefully ignored.
-	 * <p>
-	 * 3. Clears the session map and populates it with sessions retrieved from a
+	 * 1. Clears the session map and populates it with sessions retrieved from a
 	 * JSON array in the configuration. Each session is parsed and added to
 	 * the map by its ID.
 	 * <p>
-	 * 4. Updates the current session ID and sets whether the history has been
-	 * loaded from the configuration.
+	 * 2. Updates the current session ID and clears it when the persisted id
+	 * does not point to a loaded session.
 	 */
 	public void loadFromConfig()
 	{
@@ -109,13 +112,23 @@ public class ManagerSession
 		String json = config.sessionsJson();
 		if (json != null && !json.isEmpty())
 		{
-			Session[] arr = gson.fromJson(json, Session[].class);
-			if (arr != null)
+			try
 			{
-				for (Session s : arr)
+				Session[] arr = gson.fromJson(json, Session[].class);
+				if (arr != null)
 				{
-					sessions.put(s.getId(), s);
+					for (Session s : arr)
+					{
+						if (s != null && s.getId() != null)
+						{
+							sessions.put(s.getId(), s);
+						}
+					}
 				}
+			}
+			catch (Exception e)
+			{
+				log.warn("Failed to load sessions from config JSON", e);
 			}
 		}
 
@@ -123,6 +136,11 @@ public class ManagerSession
 		motherKillsCache.clear();
 
 		currentSessionId = emptyToNull(config.currentSessionId());
+		if (currentSessionId != null && !sessions.containsKey(currentSessionId))
+		{
+			log.warn("Configured current session id {} was not found in persisted sessions", currentSessionId);
+			currentSessionId = null;
+		}
 	}
 
 	/**
@@ -131,28 +149,34 @@ public class ManagerSession
 	public void saveToConfig()
 	{
 		Session[] arr = sessions.values().toArray(new Session[0]);
-		config.sessionsJson(gson.toJson(arr));
-		config.currentSessionId(nullToEmpty(currentSessionId));
+		try
+		{
+			config.sessionsJson(gson.toJson(arr));
+			config.currentSessionId(nullToEmpty(currentSessionId));
+		}
+		catch (Exception e)
+		{
+			log.warn("Failed to save sessions to config", e);
+		}
 	}
 
 	/**
-	 * Placeholder for exporting all sessions as JSON (for sharing/backups).
-	 * Returns a JSON string. Implementation can reuse the existing gson and sessions map.
+	 * Export all sessions as JSON for sharing or backups.
 	 */
 	public String exportAllSessionsJson()
 	{
-		// TODO Implement: return gson.toJson(sessions.values());
-		return "";
+		return gson.toJson(sessions.values());
 	}
 
 	/**
-	 * Placeholder for exporting a single session by id as JSON.
-	 * Returns a JSON string for the specified session or empty string if not found.
+	 * Export a single session by id as JSON.
+	 *
+	 * @return JSON for the specified session, or empty string when not found
 	 */
 	public String exportSessionJson(String sessionId)
 	{
-		// TODO Implement: Session s = sessions.get(sessionId); return s != null ? gson.toJson(s) : "";
-		return "";
+		Session session = sessions.get(sessionId);
+		return session == null ? "" : gson.toJson(session);
 	}
 
 	/**
@@ -160,7 +184,12 @@ public class ManagerSession
 	 */
 	public Set<String> getKnownPlayers()
 	{
-		return Collections.unmodifiableSet(playerManager.getKnownMains());
+		Set<String> mains = playerManager.getKnownMains();
+		if (mains == null)
+		{
+			return Collections.emptySet();
+		}
+		return Collections.unmodifiableSet(mains);
 	}
 
 	/**
@@ -171,16 +200,21 @@ public class ManagerSession
 	public Set<String> getNonActivePlayers()
 	{
 		Session curr = getCurrentSession().orElse(null);
-		java.util.Set<String> mains = playerManager.getKnownMains();
+		Set<String> mains = playerManager.getKnownMains();
+		if (mains == null)
+		{
+			return Collections.emptySet();
+		}
 
 		if (curr == null || !curr.isActive())
 		{
-			return java.util.Collections.unmodifiableSet(mains);
+			return Collections.unmodifiableSet(mains);
 		}
 
-		return mains.stream()
-			.filter(p -> !curr.getPlayers().contains(p))
+		Set<String> nonActivePlayers = mains.stream()
+			.filter(p -> curr.getPlayers().stream().noneMatch(active -> active.equalsIgnoreCase(p)))
 			.collect(Collectors.toCollection(LinkedHashSet::new));
+		return Collections.unmodifiableSet(nonActivePlayers);
 	}
 
 	/**
@@ -270,7 +304,10 @@ public class ManagerSession
 
 		currentSessionId = child.getId();
 		saveToConfig();
-		pluginManager.updateChatWarningStatus();
+		if (pluginManager != null)
+		{
+			pluginManager.updateChatWarningStatus();
+		}
 		return Optional.of(child);
 	}
 
@@ -280,7 +317,7 @@ public class ManagerSession
 	 *
 	 * @return true if an active session was stopped
 	 */
-	public boolean stopSession(PanelView view)
+	public boolean stopSession()
 	{
 		if (historyLoaded)
 		{
@@ -289,15 +326,6 @@ public class ManagerSession
 
 		Session curr = getCurrentSession().orElse(null);
 		if (curr == null || !curr.isActive())
-		{
-			return false;
-		}
-
-		if (
-			JOptionPane.showConfirmDialog(view,
-				"Are you sure you want to stop the session")
-				!= 0
-		)
 		{
 			return false;
 		}
@@ -316,7 +344,10 @@ public class ManagerSession
 
 		currentSessionId = null;
 		saveToConfig();
-		pluginManager.updateChatWarningStatus();
+		if (pluginManager != null)
+		{
+			pluginManager.updateChatWarningStatus();
+		}
 		return true;
 	}
 
@@ -333,7 +364,7 @@ public class ManagerSession
 	{
 		if (historyLoaded)
 		{
-			return false; // TODO support his
+			return false;
 		}
 		Session curr = getCurrentSession().orElse(null);
 		if (curr == null || !curr.isActive())
@@ -341,7 +372,7 @@ public class ManagerSession
 			return false;
 		}
 
-		String mainPlayer = playerManager.getMainName(player == null ? null : player.trim());
+		String mainPlayer = resolveMainName(player);
 		if (mainPlayer == null || mainPlayer.isBlank())
 		{
 			return false;
@@ -368,7 +399,7 @@ public class ManagerSession
 
 			// Record a JOINED event kill in the new child
 			Kill joinEvent = new Kill(newChild.getId(), fMain, 0L, Instant.now());
-			joinEvent.setType("JOINED");
+			joinEvent.setType(Kill.TYPE_JOINED);
 			newChild.getKills().add(joinEvent);
 
 			// Update mother cache incrementally
@@ -383,7 +414,7 @@ public class ManagerSession
 			curr.getPlayers().add(fMain);
 			// Record a JOINED event kill in the current child (no kills yet)
 			Kill joinEvent = new Kill(curr.getId(), fMain, 0L, Instant.now());
-			joinEvent.setType("JOINED");
+			joinEvent.setType(Kill.TYPE_JOINED);
 			curr.getKills().add(joinEvent);
 
 			// Update mother cache incrementally
@@ -418,12 +449,13 @@ public class ManagerSession
 		{
 			return false;
 		}
-		player = playerManager.getMainName(player.trim());
+		player = resolveMainName(player);
 		if (player == null || player.isBlank())
 		{
 			return false;
 		}
-		if (!curr.getPlayers().contains(player))
+		String resolvedPlayer = player;
+		if (curr.getPlayers().stream().noneMatch(p -> p.equalsIgnoreCase(resolvedPlayer)))
 		{
 			return false;
 		}
@@ -443,7 +475,7 @@ public class ManagerSession
 
 			// Record a LEFT event kill in the new child
 			Kill leaveEvent = new Kill(newChild.getId(), finalPlayer, 0L, Instant.now());
-			leaveEvent.setType("LEFT");
+			leaveEvent.setType(Kill.TYPE_LEFT);
 			newChild.getKills().add(leaveEvent);
 
 			// Update mother cache incrementally
@@ -454,10 +486,11 @@ public class ManagerSession
 		}
 		else
 		{
-			curr.getPlayers().remove(player);
+			String finalPlayer = player;
+			curr.getPlayers().removeIf(p -> p.equalsIgnoreCase(finalPlayer));
 			// Record a LEFT event kill in the current child (no kills yet)
 			Kill leaveEvent = new Kill(curr.getId(), player, 0L, Instant.now());
-			leaveEvent.setType("LEFT");
+			leaveEvent.setType(Kill.TYPE_LEFT);
 			curr.getKills().add(leaveEvent);
 
 			// Update mother cache incrementally
@@ -476,11 +509,11 @@ public class ManagerSession
 	 * @param amount value in coins (may be negative if allowed by config)
 	 * @return true if recorded
 	 */
-	public boolean addKill(@Nonnull String player, @Nonnull Long amount)
+	public boolean addKill(String player, Long amount)
 	{
 		if (historyLoaded)
 		{
-			return false; //TODO support altering history
+			return false;
 		}
 
 		Session currentSession = getCurrentSession().orElse(null);
@@ -488,8 +521,12 @@ public class ManagerSession
 		{
 			return false;
 		}
+		if (amount == null)
+		{
+			return false;
+		}
 
-		String mainPlayer = playerManager.getMainName(player.trim());
+		String mainPlayer = resolveMainName(player);
 		if (mainPlayer == null || mainPlayer.isBlank())
 		{
 			return false;
@@ -525,22 +562,26 @@ public class ManagerSession
 	 *
 	 * @param pendingValue pending value payload; null is ignored
 	 */
-	public void addPendingValue(@Nonnull PendingValue pendingValue)
+	public void addPendingValue(PendingValue pendingValue)
 	{
+		if (pendingValue == null || pendingValue.getValue() == null)
+		{
+			return;
+		}
+
 		// Normalize suggestedPlayer player to main for all downstream uses
 		String suggestedPlayer = pendingValue.getSuggestedPlayer();
-		String resolvedPlayer = playerManager.getMainName(suggestedPlayer);
+		String resolvedPlayer = resolveMainName(suggestedPlayer);
 
 		pendingValue.setSuggestedPlayer(resolvedPlayer);
 
-		if (!playerManager.getKnownPlayers().contains(resolvedPlayer))
+		if (resolvedPlayer != null && !resolvedPlayer.isBlank() && !playerManager.isKnownPlayer(resolvedPlayer))
 		{
-			playerManager.getKnownPlayers().add(resolvedPlayer);
-			saveToConfig();
+			playerManager.addKnownPlayer(resolvedPlayer);
 		}
 
 		// Auto-apply if configured and player already in session
-		if (config.autoApplyWhenInSession() && hasActiveSession())
+		if (resolvedPlayer != null && config.autoApplyWhenInSession() && hasActiveSession())
 		{
 			Session currentSession = getCurrentSession().orElse(null);
 			if (currentSession != null && currentSession.getPlayers().stream().anyMatch(p -> p.equalsIgnoreCase(resolvedPlayer)))
@@ -551,7 +592,7 @@ public class ManagerSession
 		}
 
 		// Limit size to avoid unbounded growth
-		if (pendingValues.size() > 100)
+		if (pendingValues.size() >= 100)
 		{
 			pendingValues.remove(0);
 		}
@@ -584,7 +625,7 @@ public class ManagerSession
 		{
 			return false;
 		}
-		String target = playerManager.getMainName(player);
+		String target = resolveMainName(player);
 		boolean ok = addKill(target, pv.getValue());
 		if (ok)
 		{
@@ -597,7 +638,7 @@ public class ManagerSession
 	 * Returns true if the given player (main or alt) is present in the roster of the current session.
 	 * Alts are resolved to their main before the check.
 	 */
-	public boolean currentSessionHasPlayer(@Nonnull String player)
+	public boolean currentSessionHasPlayer(String player)
 	{
 		return sessionHasPlayer(player, getCurrentSession().orElse(null));
 	}
@@ -606,25 +647,27 @@ public class ManagerSession
 	 * Returns true if the given player (main or alt) is present in the roster of the provided session.
 	 * Alts are resolved to their main before the check.
 	 */
-	public boolean sessionHasPlayer(@Nonnull String player, Session session)
+	public boolean sessionHasPlayer(String player, Session session)
 	{
-		if (playerManager.isAlt(player))
+		if (session == null)
 		{
-			player = playerManager.getMainName(player);
+			return false;
 		}
 
-		String finalPlayer = player;
+		String mainPlayer = resolveMainName(player);
+		if (mainPlayer == null)
+		{
+			return false;
+		}
 
 		return session.getPlayers().stream().anyMatch(e ->
-			e.equals(Objects.requireNonNull(finalPlayer)));
+			e.equalsIgnoreCase(mainPlayer));
 	}
 
 	public void init()
 	{
 		loadFromConfig();
 	}
-
-	//TODO make this not recalc everything if it does
 
 	/**
 	 * Compute metrics for the given session's thread (mother + children) including only currently active players.
@@ -654,10 +697,12 @@ public class ManagerSession
 			return List.of();
 		}
 
-		// Determine the mother (root) id for the session thread
-		String rootId = (s.getMotherId() == null) ? s.getId() : s.getMotherId();
+		return splitCalculator.compute(s, getThreadSessions(s), playerManager.getKnownPlayers(), includeNonActivePlayers);
+	}
 
-		// Collect all sessions in the thread: mother + all children
+	private List<Session> getThreadSessions(Session s)
+	{
+		String rootId = (s.getMotherId() == null) ? s.getId() : s.getMotherId();
 		List<Session> thread = new ArrayList<>();
 		Session mother = sessions.get(rootId);
 		if (mother != null)
@@ -671,113 +716,7 @@ public class ManagerSession
 				thread.add(candidate);
 			}
 		}
-
-		// Build included players:
-		// - includeNonActivePlayers: union of knownPlayers and everyone who appeared in the thread
-		// - otherwise: only the current session's active roster
-		LinkedHashSet<String> includedPlayers = new LinkedHashSet<>();
-		if (includeNonActivePlayers)
-		{
-			includedPlayers.addAll(playerManager.getKnownPlayers());
-			for (Session part : thread)
-			{
-				includedPlayers.addAll(part.getPlayers());
-			}
-		}
-		else
-		{
-			includedPlayers.addAll(s.getPlayers());
-		}
-
-		// Initialize aggregate totals and splits
-		Map<String, Long> totals = new LinkedHashMap<>();
-		Map<String, Long> splits = new LinkedHashMap<>();
-		for (String p : includedPlayers)
-		{
-			totals.put(p, 0L);
-			splits.put(p, 0L);
-		}
-
-		// For each session in the thread:
-		// - compute that session's per-player totals for its own roster
-		// - compute that session's average across its roster (including zeroes)
-		// - for players active in that session, accumulate (playerTotal - sessionAvg) into splits
-		for (Session part : thread)
-		{
-			// Roster for this part (the only players eligible for this part's split)
-			List<String> roster = new ArrayList<>(part.getPlayers());
-			if (roster.isEmpty())
-			{
-				continue;
-			}
-
-			// Per-session totals for players in this roster
-			Map<String, Long> perSessionTotals = new LinkedHashMap<>();
-			for (String p : roster)
-			{
-				perSessionTotals.put(p, 0L);
-			}
-			for (Kill k : part.getKills())
-			{
-				// Ignore JOINED/LEFT events in split math; only count regular loot
-				String t = k.getType();
-				if (t != null && !t.equalsIgnoreCase("LOOT"))
-				{
-					continue;
-				}
-				perSessionTotals.computeIfPresent(k.getPlayer(), (k1, v) -> v + k.getAmount());
-			}
-
-			// Session average across the entire roster
-			Long sessionAvg = 0L;
-			if (!perSessionTotals.isEmpty())
-			{
-				Long sum = 0L;
-				for (Long v : perSessionTotals.values())
-				{
-					sum += v;
-				}
-				sessionAvg = sum / perSessionTotals.size();
-			}
-
-			// Accumulate totals and splits into the aggregate maps
-			for (Map.Entry<String, Long> e : perSessionTotals.entrySet())
-			{
-				String player = e.getKey();
-				Long playerTotalThisSession = e.getValue();
-
-				// Aggregate total (only if we're showing this player)
-				if (totals.containsKey(player))
-				{
-					totals.compute(player, (k, v) -> (v) + playerTotalThisSession);
-				}
-
-				// Aggregate split only for players active in THIS session
-				if (splits.containsKey(player))
-				{
-					Long delta = sessionAvg - playerTotalThisSession;
-					splits.compute(player, (k, v) -> (v) + delta);
-				}
-			}
-		}
-
-		// Build output rows, marking active based on the provided session's current roster
-		List<PlayerMetrics> out = new ArrayList<>();
-		for (String p : includedPlayers)
-		{
-			boolean isActiveNow = s.getPlayers().contains(p);
-			Long total = totals.getOrDefault(p, 0L);
-			Long split = splits.getOrDefault(p, 0L);
-
-			// Skip players with total = 0, unless they are active now
-			if (!isActiveNow && total == 0.0 && split == 0.0)
-			{
-				continue;
-			}
-
-			out.add(new PlayerMetrics(p, total, split, isActiveNow));
-		}
-		return out;
+		return thread;
 	}
 
 
