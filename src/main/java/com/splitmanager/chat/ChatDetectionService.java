@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -16,10 +17,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ChatDetectionService
 {
-	private static final Pattern PVM_DROP = Pattern.compile("^(.+?) received a drop: .*?\\((\\d[\\d,]*) coins\\)");
-	private static final Pattern PVP_LOOT = Pattern.compile("^(.+?) has defeated (.+?) and received \\((\\d[\\d,]*) coins\\) worth of loot!");
-	private static final Pattern ADD_COMMAND = Pattern.compile("(?i)!add\\s+(.+)");
-	private static final Pattern ADD_VALUE = Pattern.compile("(?i)^([0-9][0-9,]*(?:\\.[0-9]+)?)([kmb])?$");
 	private static final Pattern TAGS = Pattern.compile("<[^>]*>");
 
 	public List<PendingValue> detect(PluginConfig config, ChatSource source, String sender, String message)
@@ -32,20 +29,24 @@ public class ChatDetectionService
 
 		if (config.detectPvmValues())
 		{
-			Matcher pvm = PVM_DROP.matcher(message);
+			Matcher pvm = configuredPattern(config.pvmDropRegex(), PluginConfig.DEFAULT_PVM_DROP_REGEX, "pvmDropRegex").matcher(message);
 			if (pvm.find())
 			{
-				addParsedValue(out, PendingValue.Type.PVM, source, message, pvm.group(2) + " coins", pvm.group(1), config);
+				String player = group(pvm, "player", 1);
+				String value = group(pvm, "value", 2);
+				addParsedValue(out, PendingValue.Type.PVM, source, message, valueWithCoins(value), player, config);
 				return out;
 			}
 		}
 
 		if (config.detectPvpValues())
 		{
-			Matcher pvp = PVP_LOOT.matcher(message);
+			Matcher pvp = configuredPattern(config.pvpLootRegex(), PluginConfig.DEFAULT_PVP_LOOT_REGEX, "pvpLootRegex").matcher(message);
 			if (pvp.find())
 			{
-				addParsedValue(out, PendingValue.Type.PVP, source, message, pvp.group(3) + " coins", pvp.group(1), config);
+				String player = group(pvp, "player", 1);
+				String value = group(pvp, "value", 3, 2);
+				addParsedValue(out, PendingValue.Type.PVP, source, message, valueWithCoins(value), player, config);
 				return out;
 			}
 		}
@@ -55,15 +56,22 @@ public class ChatDetectionService
 			return out;
 		}
 
-		Matcher add = ADD_COMMAND.matcher(message);
+		Matcher add = configuredPattern(config.addCommandRegex(), PluginConfig.DEFAULT_ADD_COMMAND_REGEX, "addCommandRegex").matcher(message);
 		if (!add.find())
 		{
 			return out;
 		}
 
 		String who = cleanSender(sender);
-		String valuesText = add.group(1);
-		String[] valueStrings = valuesText.split("\\s*,\\s+|\\s+");
+		String valuesText = group(add, "values", 1);
+		if (valuesText == null || valuesText.isBlank())
+		{
+			return out;
+		}
+		String[] valueStrings = valuesText.split(configuredPatternText(
+			config.addValueSeparatorRegex(),
+			PluginConfig.DEFAULT_ADD_VALUE_SEPARATOR_REGEX,
+			"addValueSeparatorRegex"));
 		for (String valueString : valueStrings)
 		{
 			String normalized = normalizeAddValue(valueString, config);
@@ -84,6 +92,11 @@ public class ChatDetectionService
 	                            String suggestedPlayer,
 	                            PluginConfig config)
 	{
+		if (amountText == null || amountText.isBlank())
+		{
+			log.debug("Chat detection regex matched without a value for {}", type);
+			return;
+		}
 		try
 		{
 			long value = Formats.OsrsAmountFormatter.stringAmountToLongAmount(amountText, config);
@@ -111,23 +124,29 @@ public class ChatDetectionService
 			return null;
 		}
 
-		Matcher single = ADD_VALUE.matcher(trimmed);
+		Matcher single = configuredPattern(config.addValueRegex(), PluginConfig.DEFAULT_ADD_VALUE_REGEX, "addValueRegex").matcher(trimmed);
 		if (!single.matches())
 		{
 			return null;
 		}
 
-		String unit = single.group(2);
+		String number = group(single, "number", 1);
+		if (number == null || number.isBlank())
+		{
+			return null;
+		}
+
+		String unit = group(single, "unit", 2);
 		if (unit == null)
 		{
 			PluginConfig.ValueMultiplier multiplier = config.defaultValueMultiplier();
 			if (multiplier == null || multiplier.getValue() == null || multiplier.getValue().isEmpty())
 			{
-				return single.group(1) + " coins";
+				return number + " coins";
 			}
 			unit = multiplier.getValue();
 		}
-		return single.group(1) + unit;
+		return number + unit;
 	}
 
 	private String cleanSender(String sender)
@@ -137,5 +156,69 @@ public class ChatDetectionService
 			return "";
 		}
 		return TAGS.matcher(sender).replaceAll("").trim();
+	}
+
+	private Pattern configuredPattern(String configured, String defaultPattern, String key)
+	{
+		return Pattern.compile(configuredPatternText(configured, defaultPattern, key));
+	}
+
+	private String configuredPatternText(String configured, String defaultPattern, String key)
+	{
+		String patternText = configured == null || configured.isBlank() ? defaultPattern : configured;
+		try
+		{
+			Pattern.compile(patternText);
+			return patternText;
+		}
+		catch (PatternSyntaxException e)
+		{
+			log.warn("Invalid chat detection regex for {}; falling back to default", key, e);
+			return defaultPattern;
+		}
+	}
+
+	private String group(Matcher matcher, String name, int... fallbackIndexes)
+	{
+		try
+		{
+			String value = matcher.group(name);
+			if (value != null)
+			{
+				return value;
+			}
+		}
+		catch (IllegalArgumentException e)
+		{
+			// Fall through to index-based compatibility.
+			log.trace("Named chat regex group {} is not available", name, e);
+		}
+
+		for (int index : fallbackIndexes)
+		{
+			if (index <= matcher.groupCount())
+			{
+				String value = matcher.group(index);
+				if (value != null)
+				{
+					return value;
+				}
+			}
+		}
+		return null;
+	}
+
+	private String valueWithCoins(String value)
+	{
+		if (value == null)
+		{
+			return null;
+		}
+		String trimmed = value.trim();
+		if (trimmed.matches(".*[A-Za-z].*"))
+		{
+			return trimmed;
+		}
+		return trimmed + " coins";
 	}
 }

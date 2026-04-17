@@ -203,4 +203,19 @@ public class ManagerPluginTest
 
 		verify(sessionManager, never()).addPendingValue(any());
 	}
+
+	@Test
+	public void testConfiguredLeaveRegexCanShortCircuitDetection()
+	{
+		when(config.chatLeaveOrKickRegex()).thenReturn("(?i)^!add.*$");
+
+		ChatMessage chatMessage = new ChatMessage();
+		chatMessage.setType(ChatMessageType.CLAN_CHAT);
+		chatMessage.setName("Player1");
+		chatMessage.setMessage("!add 100");
+
+		managerPlugin.onChatMessage(chatMessage);
+
+		verify(sessionManager, never()).addPendingValue(any());
+	}
 }

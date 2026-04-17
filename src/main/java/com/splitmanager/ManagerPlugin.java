@@ -12,6 +12,7 @@ import java.awt.image.BufferedImage;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import javax.inject.Inject;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -52,8 +53,6 @@ import net.runelite.client.util.Text;
 public class ManagerPlugin extends Plugin
 {
 	private static final BufferedImage ICON = ImageUtil.loadImageResource(ManagerPlugin.class, "/com/splitmanager/icons/icon.png");
-	private static final Pattern CHAT_LEAVE_OR_KICK = Pattern.compile("(?i)^\\s*(?:you\\s+(?:have\\s+)?left\\s+(?:the\\s+)?(?:chat-)?channel\\.?|you\\s+(?:are|aren't|are\\s+not)\\s+currently\\s+in\\s+(?:a|the|your)\\s+(?:chat-)?channel\\.?|you\\s+have\\s+been\\s+kicked\\s+from\\s+the\\s+channel\\.?)\\s*$");
-	private static final Pattern CHAT_JOIN = Pattern.compile("(?i)^\\s*now\\s+talking\\s+in\\s+(?:the\\s+)?(?:chat-)?channel\\.?\\s*$");
 	private final ChatDetectionService chatDetectionService = new ChatDetectionService();
 	@Inject
 	private Client client;
@@ -304,7 +303,9 @@ public class ManagerPlugin extends Plugin
 		}
 
 		//LEAVE/KICK Chat
-		if (CHAT_LEAVE_OR_KICK.matcher(plain).find())
+		if (configuredPattern(config.chatLeaveOrKickRegex(),
+			PluginConfig.DEFAULT_CHAT_LEAVE_OR_KICK_REGEX,
+			"chatLeaveOrKickRegex").matcher(plain).find())
 		{
 			updateChatWarningStatus();
 			return true;
@@ -312,12 +313,28 @@ public class ManagerPlugin extends Plugin
 
 
 		//JOIN Chat
-		if (CHAT_JOIN.matcher(plain).find())
+		if (configuredPattern(config.chatJoinRegex(),
+			PluginConfig.DEFAULT_CHAT_JOIN_REGEX,
+			"chatJoinRegex").matcher(plain).find())
 		{
 			updateChatWarningStatus();
 			return false;
 		}
 		return false;
+	}
+
+	private Pattern configuredPattern(String configured, String defaultPattern, String key)
+	{
+		String patternText = configured == null || configured.isBlank() ? defaultPattern : configured;
+		try
+		{
+			return Pattern.compile(patternText);
+		}
+		catch (PatternSyntaxException e)
+		{
+			log.warn("Invalid chat status regex for {}; falling back to default", key, e);
+			return Pattern.compile(defaultPattern);
+		}
 	}
 
 

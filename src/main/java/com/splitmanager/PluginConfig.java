@@ -21,11 +21,18 @@ public interface PluginConfig extends Config
 	String KEY_CURRENT_SESSION_ID = "currentSessionId";
 	String KEY_HISTORY_LOADED = "historyLoaded";
 	String KEY_PEOPLE_CSV = "PlayersCsv";
+	String DEFAULT_PVM_DROP_REGEX = "^(?<player>.+?) received a drop: .*?\\((?<value>\\d[\\d,]*) coins\\)";
+	String DEFAULT_PVP_LOOT_REGEX = "^(?<player>.+?) has defeated .+? and received \\((?<value>\\d[\\d,]*) coins\\) worth of loot!";
+	String DEFAULT_ADD_COMMAND_REGEX = "(?i)!add\\s+(?<values>.+)";
+	String DEFAULT_ADD_VALUE_REGEX = "(?i)^(?<number>[0-9][0-9,]*(?:\\.[0-9]+)?)(?<unit>[kmb])?$";
+	String DEFAULT_ADD_VALUE_SEPARATOR_REGEX = "\\s*,\\s+|\\s+";
+	String DEFAULT_CHAT_LEAVE_OR_KICK_REGEX = "(?i)^\\s*(?:you\\s+(?:have\\s+)?left\\s+(?:the\\s+)?(?:chat-)?channel\\.?|you\\s+(?:are|aren't|are\\s+not)\\s+currently\\s+in\\s+(?:a|the|your)\\s+(?:chat-)?channel\\.?|you\\s+have\\s+been\\s+kicked\\s+from\\s+the\\s+channel\\.?)\\s*$";
+	String DEFAULT_CHAT_JOIN_REGEX = "(?i)^\\s*now\\s+talking\\s+in\\s+(?:the\\s+)?(?:chat-)?channel\\.?\\s*$";
 	//TODO Create a new configitem that allows the user to submit any forms on enter, e.g. 1) user fills in split amount 2) presses enter 3) The same function as button press is called
 	@ConfigSection(
 		name = "Settlement",
 		description = "Settlement config",
-		position = 2
+		position = 3
 	)
 	String settlementSection = "Settlement";
 	// Chat detection settings
@@ -35,6 +42,12 @@ public interface PluginConfig extends Config
 		position = 1
 	)
 	String chatDetectionSection = "Chat detection";
+	@ConfigSection(
+		name = "Chat regex",
+		description = "Customize chat detection regex patterns",
+		position = 2
+	)
+	String chatRegexSection = "Chat regex";
 	// Alt/main mapping persistence (hidden JSON)
 	String KEY_ALTS_JSON = "altsJson";
 
@@ -351,6 +364,86 @@ public interface PluginConfig extends Config
 	default boolean autoApplyWhenInSession()
 	{
 		return false;
+	}
+
+	@ConfigItem(
+		keyName = "pvmDropRegex",
+		name = "PvM drop regex",
+		description = "Regex for PvM drops. Prefer named groups player and value. Index fallback: group 1 player, group 2 value.",
+		section = chatRegexSection
+	)
+	default String pvmDropRegex()
+	{
+		return DEFAULT_PVM_DROP_REGEX;
+	}
+
+	@ConfigItem(
+		keyName = "pvpLootRegex",
+		name = "PvP loot regex",
+		description = "Regex for PvP loot. Prefer named groups player and value. Index fallback: group 1 player, group 3 or 2 value.",
+		section = chatRegexSection
+	)
+	default String pvpLootRegex()
+	{
+		return DEFAULT_PVP_LOOT_REGEX;
+	}
+
+	@ConfigItem(
+		keyName = "addCommandRegex",
+		name = "!add command regex",
+		description = "Regex for !add messages. Prefer named group values. Index fallback: group 1 values.",
+		section = chatRegexSection
+	)
+	default String addCommandRegex()
+	{
+		return DEFAULT_ADD_COMMAND_REGEX;
+	}
+
+	@ConfigItem(
+		keyName = "addValueRegex",
+		name = "!add value regex",
+		description = "Regex for each !add value token. Prefer named groups number and unit. Index fallback: group 1 number, group 2 unit.",
+		section = chatRegexSection,
+		hidden = true
+	)
+	default String addValueRegex()
+	{
+		return DEFAULT_ADD_VALUE_REGEX;
+	}
+
+	@ConfigItem(
+		keyName = "addValueSeparatorRegex",
+		name = "!add value separator regex",
+		description = "Regex used to split multiple !add values. Default splits on whitespace or comma followed by whitespace.",
+		section = chatRegexSection
+	)
+	default String addValueSeparatorRegex()
+	{
+		return DEFAULT_ADD_VALUE_SEPARATOR_REGEX;
+	}
+
+	@ConfigItem(
+		keyName = "chatLeaveOrKickRegex",
+		name = "Chat leave regex",
+		description = "Regex for chat-channel leave/kick messages used to refresh warning status.",
+		section = chatRegexSection,
+		hidden = true
+	)
+	default String chatLeaveOrKickRegex()
+	{
+		return DEFAULT_CHAT_LEAVE_OR_KICK_REGEX;
+	}
+
+	@ConfigItem(
+		keyName = "chatJoinRegex",
+		name = "Chat join regex",
+		description = "Regex for chat-channel join messages used to refresh warning status.",
+		section = chatRegexSection,
+		hidden = true
+	)
+	default String chatJoinRegex()
+	{
+		return DEFAULT_CHAT_JOIN_REGEX;
 	}
 
 	/**

@@ -71,6 +71,50 @@ public class ChatDetectionServiceTest
 	}
 
 	@Test
+	public void usesConfiguredPvmRegexWithNamedGroups()
+	{
+		when(config.pvmDropRegex()).thenReturn("^DROP (?<player>.+?) :: (?<value>[0-9,]+)$");
+
+		List<PendingValue> values = service.detect(config, ChatSource.CLAN, "System",
+			"DROP CustomPlayer :: 9,876,543");
+
+		assertEquals(1, values.size());
+		assertEquals(PendingValue.Type.PVM, values.get(0).getType());
+		assertEquals("CustomPlayer", values.get(0).getSuggestedPlayer());
+		assertEquals(9876543L, (long) values.get(0).getValue());
+	}
+
+	@Test
+	public void usesConfiguredAddRegexesAndSeparator()
+	{
+		when(config.addCommandRegex()).thenReturn("(?i)^split:\\s*(?<values>.+)$");
+		when(config.addValueSeparatorRegex()).thenReturn("\\s*;\\s*");
+		when(config.addValueRegex()).thenReturn("(?i)^gp\\((?<number>[0-9,]+)(?<unit>[kmb])?\\)$");
+
+		List<PendingValue> values = service.detect(config, ChatSource.FRIENDS, "Player1",
+			"split: gp(100); gp(2m)");
+
+		assertEquals(2, values.size());
+		assertEquals(100000L, (long) values.get(0).getValue());
+		assertEquals(2000000L, (long) values.get(1).getValue());
+		assertEquals("Player1", values.get(0).getSuggestedPlayer());
+	}
+
+	@Test
+	public void invalidConfiguredRegexFallsBackToDefault()
+	{
+		when(config.pvmDropRegex()).thenReturn("[not valid");
+
+		List<PendingValue> values = service.detect(config, ChatSource.CLAN, "System",
+			"Player1 received a drop: Example item (1,234,567 coins)");
+
+		assertEquals(1, values.size());
+		assertEquals(PendingValue.Type.PVM, values.get(0).getType());
+		assertEquals("Player1", values.get(0).getSuggestedPlayer());
+		assertEquals(1234567L, (long) values.get(0).getValue());
+	}
+
+	@Test
 	public void returnsEmptyWhenDisabledOrInvalid()
 	{
 		when(config.detectPvmValues()).thenReturn(false);
