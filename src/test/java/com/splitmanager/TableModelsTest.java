@@ -9,6 +9,7 @@ import com.splitmanager.models.WaitlistTable;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JButton;
 import static org.junit.Assert.assertEquals;
@@ -27,6 +28,8 @@ public class TableModelsTest
 	{
 		WaitlistTable table = new WaitlistTable();
 		PendingValue pending = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 100", 100000L, null);
+		AtomicInteger edits = new AtomicInteger();
+		table.setEditListener(edits::incrementAndGet);
 
 		table.setData(Collections.singletonList(pending));
 
@@ -53,11 +56,14 @@ public class TableModelsTest
 		table.setValueAt("Player1", 0, 2);
 		assertEquals("Player1", pending.getSuggestedPlayer());
 		assertEquals("Player1", table.getValueAt(0, 2));
+		assertEquals(1, edits.get());
 
 		table.setValueAt("2m", 0, 1);
 		assertEquals(2000000L, (long) pending.getValue());
+		assertEquals(2, edits.get());
 		table.setValueAt("bad", 0, 1);
 		assertEquals(2000000L, (long) pending.getValue());
+		assertEquals(2, edits.get());
 
 		table.setData(null);
 		assertEquals(0, table.getRowCount());

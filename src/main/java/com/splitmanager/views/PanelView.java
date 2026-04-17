@@ -29,8 +29,11 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
+import java.awt.event.KeyEvent;
 import java.awt.datatransfer.StringSelection;
+import java.text.ParseException;
 import java.util.List;
+import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -49,8 +52,10 @@ import javax.swing.JSeparator;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.text.DefaultFormatterFactory;
 import lombok.Getter;
@@ -114,17 +119,24 @@ public class PanelView extends PluginPanel
 		this.config = config;
 		this.playerManager = playerManager;
 		bindActions(controller);
+		bindEnterSubmits();
 
 		recentSplitsModel = new RecentSplitsTable(config);
 		recentSplitsModel.setListener(editedKill -> {
 			if (actions != null)
 			{
-				actions.recomputeMetricsForSession(editedKill != null ? editedKill.getSessionId() : null);
+				SwingUtilities.invokeLater(() -> actions.refreshSharedViews());
 			}
 			else
 			{
 				// Fallback: recompute current if no controller available
 				refreshMetrics();
+			}
+		});
+		waitlistTableModel.setEditListener(() -> {
+			if (actions != null)
+			{
+				SwingUtilities.invokeLater(() -> actions.refreshSharedViews());
 			}
 		});
 		recentSplitsTable = makeRecentSplitsTable(recentSplitsModel);
@@ -276,6 +288,57 @@ public class PanelView extends PluginPanel
 				}
 			}
 		});
+	}
+
+	private void bindEnterSubmits()
+	{
+		newPlayerField.addActionListener(e -> clickIfEnabled(btnAddPlayer));
+		killAmountField.addActionListener(e -> {
+			if (commitField(killAmountField))
+			{
+				clickIfEnabled(btnAddKill);
+			}
+		});
+
+		bindEnterToButton(notInCurrentSessionPlayerDropdown, btnAddToSession);
+		bindEnterToButton(currentSessionPlayerDropdown, btnAddKill);
+		bindEnterToButton(addAltDropdown, btnAddAlt);
+	}
+
+	private void bindEnterToButton(JComponent component, JButton button)
+	{
+		component.getInputMap(JComponent.WHEN_FOCUSED)
+			.put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "submit-form");
+		component.getActionMap().put("submit-form", new AbstractAction()
+		{
+			@Override
+			public void actionPerformed(java.awt.event.ActionEvent e)
+			{
+				clickIfEnabled(button);
+			}
+		});
+	}
+
+	private void clickIfEnabled(JButton button)
+	{
+		if (button != null && button.isEnabled())
+		{
+			button.doClick();
+		}
+	}
+
+	private boolean commitField(JFormattedTextField field)
+	{
+		try
+		{
+			field.commitEdit();
+			return true;
+		}
+		catch (ParseException e)
+		{
+			log.warn("Invalid field value {}", field.getText(), e);
+			return false;
+		}
 	}
 
 	private JFormattedTextField makeOsrsField()
@@ -1033,6 +1096,11 @@ public class PanelView extends PluginPanel
 		Session currentSession = sessionManager.getCurrentSession().orElse(null);
 		((Metrics) metricsTable.getModel()).setData(sessionManager.computeMetricsFor(currentSession, true));
 		refreshMetricsContent();
+		onMetricsRefreshed();
+	}
+
+	protected void onMetricsRefreshed()
+	{
 	}
 
 	private void copyMetricsJsonToClipboard()

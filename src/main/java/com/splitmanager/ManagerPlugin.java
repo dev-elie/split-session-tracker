@@ -79,8 +79,7 @@ public class ManagerPlugin extends Plugin
 	 */
 	protected void startUp()
 	{
-		//Force diable pop out for now
-		config.enablePopout(false);
+		// Direct payments are still hidden until the remove-player workflow supports them cleanly.
 		config.directPayments(false);
 
 		Formats.setConfig(config);

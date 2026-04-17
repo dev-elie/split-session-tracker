@@ -378,12 +378,17 @@ public class PanelController implements PanelActions
 	}
 
 	@Override
+	public void refreshSharedViews()
+	{
+		managerPanel.refreshAllView();
+	}
+
+	@Override
 	public void recomputeMetrics()
 	{
 		Session current = sessionManager.getCurrentSession().orElse(null);
 		if (current != null)
 		{
-			((Metrics) view.getMetricsTable().getModel()).setData(sessionManager.computeMetricsFor(current, true));
 			view.refreshMetrics();
 			view.getRecentSplitsModel().setFromKills(sessionManager.getAllKills());
 		}
@@ -478,10 +483,30 @@ public class PanelController implements PanelActions
 	private void refreshKnownPlayers()
 	{
 		String[] players = sessionManager.getKnownPlayers().toArray(new String[0]);
-		view.getKnownPlayersDropdown().setModel(new DefaultComboBoxModel<>(players));
+		setModelPreservingSelection(view.getKnownPlayersDropdown(), players);
 		view.getKnownListLabel().setText("Known (" + players.length + "):");
 
 		refreshAlts();
+	}
+
+	private void setModelPreservingSelection(JComboBox<String> comboBox, String[] values)
+	{
+		Object selected = comboBox.getSelectedItem();
+		DefaultComboBoxModel<String> model = new DefaultComboBoxModel<>(values);
+		comboBox.setModel(model);
+		if (selected == null)
+		{
+			return;
+		}
+		String selectedValue = selected.toString();
+		for (String value : values)
+		{
+			if (selectedValue.equals(value))
+			{
+				comboBox.setSelectedItem(selectedValue);
+				return;
+			}
+		}
 	}
 
 	/**
@@ -497,12 +522,13 @@ public class PanelController implements PanelActions
 			String[] notPlayers = sessionManager.getNonActivePlayers().toArray(new String[0]);
 
 			view.getCurrentSessionPlayerDropdown().setEnabled(true);
-			view.getCurrentSessionPlayerDropdown().setModel(new DefaultComboBoxModel<>(sessionPlayers));
-			view.getNotInCurrentSessionPlayerDropdown().setModel(new DefaultComboBoxModel<>(notPlayers));
+			setModelPreservingSelection(view.getCurrentSessionPlayerDropdown(), sessionPlayers);
+			setModelPreservingSelection(view.getNotInCurrentSessionPlayerDropdown(), notPlayers);
 		}
 		else
 		{
-			view.getCurrentSessionPlayerDropdown().setModel(new DefaultComboBoxModel<>(new String[0]));
+			setModelPreservingSelection(view.getCurrentSessionPlayerDropdown(), new String[0]);
+			setModelPreservingSelection(view.getNotInCurrentSessionPlayerDropdown(), new String[0]);
 			view.getCurrentSessionPlayerDropdown().setEnabled(false);
 		}
 
@@ -511,8 +537,6 @@ public class PanelController implements PanelActions
 		Session current = sessionManager.getCurrentSession().orElse(null);
 		if (current != null)
 		{
-			((Metrics) view.getMetricsTable().getModel())
-				.setData(sessionManager.computeMetricsFor(current, true));
 			view.getRecentSplitsModel().setFromKills(sessionManager.getAllKills());
 		}
 		else
@@ -602,7 +626,7 @@ public class PanelController implements PanelActions
 			}
 		}
 
-		view.getAddAltDropdown().setModel(new DefaultComboBoxModel<>(eligiblePlayers.toArray(new String[0])));
+		setModelPreservingSelection(view.getAddAltDropdown(), eligiblePlayers.toArray(new String[0]));
 	}
 
 	/**

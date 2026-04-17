@@ -92,6 +92,11 @@ public interface PanelActions
 	void refreshAllView(); // idempotent, safe to call after model mutations
 
 	/**
+	 * Refresh every open panel that shares the same manager state.
+	 */
+	void refreshSharedViews();
+
+	/**
 	 * Recompute and apply metrics for current session.
 	 */
 	void recomputeMetrics();
