@@ -83,6 +83,7 @@ public class ManagerPlugin extends Plugin
 		config.directPayments(false);
 
 		Formats.setConfig(config);
+		Formats.updateFormats();
 		playerManager.init();
 		sessionManager.init();
 		panelManager.init();
@@ -177,6 +178,14 @@ public class ManagerPlugin extends Plugin
 			case "enablePopout":
 			case "enableTour":
 				restartViewFix();
+				break;
+			case "timeFormat":
+			case "dateFormat":
+				Formats.updateFormats();
+				if (panelManager != null)
+				{
+					panelManager.refreshAllView();
+				}
 				break;
 		}
 	}

@@ -81,6 +81,28 @@ public interface PluginConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "timeFormat",
+		name = "Time format",
+		description = "Format pattern for timestamps (e.g. \"HH:mm\" or \"hh:mm a\" for PM/AM)",
+		position = 3
+	)
+	default String timeFormat()
+	{
+		return "HH:mm";
+	}
+
+	@ConfigItem(
+		keyName = "dateFormat",
+		name = "Date format",
+		description = "Format pattern for dates (e.g. \"dd-MMM\")",
+		position = 4
+	)
+	default String dateFormat()
+	{
+		return "dd-MMM";
+	}
+
+	@ConfigItem(
 		keyName = "enableTour",
 		name = "Enable tour",
 		description = "Show a guided step-by-step tutorial panel at the top of the plugin UI"

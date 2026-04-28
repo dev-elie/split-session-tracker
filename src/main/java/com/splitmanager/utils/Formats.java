@@ -7,6 +7,8 @@ import java.text.DecimalFormat;
 import java.text.ParseException;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.FormatStyle;
+import java.util.Locale;
 import java.util.regex.Pattern;
 import javax.annotation.Nonnull;
 import javax.swing.JFormattedTextField;
@@ -16,16 +18,68 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class Formats
 {
-	private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+	private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 		.withZone(ZoneId.systemDefault());
+	private static DateTimeFormatter LOCAL_TIME = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
+		.withLocale(java.util.Locale.getDefault())
+		.withZone(ZoneId.systemDefault());
+	private static DateTimeFormatter LOCAL_DATE = DateTimeFormatter.ofPattern("dd-MMM", Locale.ENGLISH)
+		.withZone(ZoneId.systemDefault());
+
+	private static final java.util.Locale LOCALE = java.util.Locale.getDefault();
 	private static final DecimalFormat DF = new DecimalFormat("#,##0");
 	private static final DecimalFormat DF_3DP = new DecimalFormat("#,##0.###");
 	@Setter
 	private static PluginConfig config;
 
+	public static void updateFormats()
+	{
+		if (config != null)
+		{
+			try
+			{
+				String timePattern = config.timeFormat();
+				timePattern = timePattern.replace("[", "'['").replace("]", "']'");
+				LOCAL_TIME = DateTimeFormatter.ofPattern(timePattern)
+					.withZone(ZoneId.systemDefault());
+			}
+			catch (Exception e)
+			{
+				log.warn("Invalid time format: {}, falling back to default", config.timeFormat());
+				LOCAL_TIME = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
+					.withLocale(java.util.Locale.getDefault())
+					.withZone(ZoneId.systemDefault());
+			}
+
+			try
+			{
+				String datePattern = config.dateFormat();
+				datePattern = datePattern.replace("[", "'['").replace("]", "']'");
+				LOCAL_DATE = DateTimeFormatter.ofPattern(datePattern, Locale.ENGLISH)
+					.withZone(ZoneId.systemDefault());
+			}
+			catch (Exception e)
+			{
+				log.warn("Invalid date format: {}, falling back to default", config.dateFormat());
+				LOCAL_DATE = DateTimeFormatter.ofPattern("dd-MMM", Locale.ENGLISH)
+					.withZone(ZoneId.systemDefault());
+			}
+		}
+	}
+
 	public static DateTimeFormatter getDateTime()
 	{
 		return TS;
+	}
+
+	public static DateTimeFormatter getLocalTime()
+	{
+		return LOCAL_TIME;
+	}
+
+	public static DateTimeFormatter getLocalDate()
+	{
+		return LOCAL_DATE;
 	}
 
 	public static DecimalFormat getDecimalFormat()

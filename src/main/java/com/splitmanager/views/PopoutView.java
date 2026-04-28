@@ -17,22 +17,38 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridLayout;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
+import java.awt.datatransfer.UnsupportedFlavorException;
+import java.io.IOException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JTable;
 import javax.swing.Scrollable;
 import javax.swing.JSplitPane;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.SwingConstants;
 import javax.swing.Timer;
+import javax.swing.TransferHandler;
+import javax.swing.table.AbstractTableModel;
+import net.runelite.client.ui.ColorScheme;
+import net.runelite.client.util.ImageUtil;
+import net.runelite.client.util.SwingUtil;
 
 public class PopoutView extends PanelView
 {
@@ -49,13 +65,35 @@ public class PopoutView extends PanelView
 	private JLabel gpPerHourValue;
 	private JLabel topPlayerValue;
 	private final Timer graphRefreshTimer = new Timer(GRAPH_REFRESH_INTERVAL_MS, e -> refreshGraph());
+	private boolean editMode = false;
+	private JComponent editContainer;
+
+	private JPanel dashboardContainer;
 
 	public PopoutView(ManagerSession sessionManager, PluginConfig config, ManagerKnownPlayers playerManager, PanelController controller)
 	{
 		super(sessionManager, config, playerManager, controller);
 		graphRefreshTimer.setInitialDelay(GRAPH_REFRESH_INTERVAL_MS);
+
 		buildPopoutLayout();
 		refreshGraph();
+	}
+
+	public JButton getToggleEditButton()
+	{
+		return btnToggleEdit;
+	}
+
+	public void setEditMode(boolean editMode)
+	{
+		this.editMode = editMode;
+		updateDashboardContent();
+	}
+
+	@Override
+	protected void onPencilClicked()
+	{
+		toggleEditMode();
 	}
 
 	@Override
@@ -88,15 +126,180 @@ public class PopoutView extends PanelView
 		controlsScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
 		controlsScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
 
-		JComponent graphDashboard = buildGraphDashboard();
-		graphDashboard.setMinimumSize(RIGHT_PANE_MINIMUM_SIZE);
+		dashboardContainer = new JPanel(new BorderLayout());
+		dashboardContainer.setMinimumSize(RIGHT_PANE_MINIMUM_SIZE);
+		updateDashboardContent();
 
-		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, controlsScroll, graphDashboard);
+		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, controlsScroll, dashboardContainer);
 		splitPane.setResizeWeight(0.32d);
 		splitPane.setContinuousLayout(true);
 		splitPane.setDividerLocation(340);
 		splitPane.setBorder(BorderFactory.createEmptyBorder());
 		add(splitPane, BorderLayout.CENTER);
+	}
+
+	private void updateDashboardContent()
+	{
+		dashboardContainer.removeAll();
+		if (editMode)
+		{
+			if (editContainer == null)
+			{
+				editContainer = buildEditDashboard();
+			}
+			dashboardContainer.add(editContainer, BorderLayout.CENTER);
+		}
+		else
+		{
+			dashboardContainer.add(buildGraphDashboard(), BorderLayout.CENTER);
+			refreshGraph();
+		}
+		dashboardContainer.revalidate();
+		dashboardContainer.repaint();
+	}
+
+	private JComponent buildEditDashboard()
+	{
+		JPanel panel = new JPanel(new BorderLayout(0, 8));
+		panel.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 0));
+
+		JPanel header = new JPanel(new BorderLayout());
+		JLabel title = new JLabel("Edit Session History");
+		title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 2.0f));
+		header.add(title, BorderLayout.WEST);
+
+		JButton btnAdd = new JButton("Add Split");
+		header.add(btnAdd, BorderLayout.EAST);
+
+		HistoryTableModel model = new HistoryTableModel();
+		JTable table = new JTable(model);
+		table.setRowHeight(24);
+		table.setDragEnabled(true);
+		table.setDropMode(javax.swing.DropMode.INSERT_ROWS);
+		table.setTransferHandler(new HistoryTransferHandler(model));
+
+		btnAdd.addActionListener(e -> {
+			sessionManager.insertKillAt(-1, "Player", 0L);
+			model.refresh();
+			controller.refreshAllView();
+		});
+
+		table.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mouseClicked(MouseEvent e)
+			{
+				if (e.getClickCount() == 2)
+				{
+					int row = table.rowAtPoint(e.getPoint());
+					if (row >= 0)
+					{
+						sessionManager.removeKillAt(row);
+						model.refresh();
+						controller.refreshAllView();
+					}
+				}
+			}
+		});
+
+		panel.add(header, BorderLayout.NORTH);
+		panel.add(new JScrollPane(table), BorderLayout.CENTER);
+
+		JLabel hint = new JLabel("Double-click to delete. Drag to reorder. Columns: Player, Amount.", SwingConstants.CENTER);
+		hint.setFont(hint.getFont().deriveFont(10f));
+		panel.add(hint, BorderLayout.SOUTH);
+
+		return panel;
+	}
+
+	private class HistoryTableModel extends AbstractTableModel
+	{
+		private List<Kill> kills = new ArrayList<>();
+		private final String[] columns = {"Time", "Player", "Amount", "Type"};
+
+		HistoryTableModel()
+		{
+			refresh();
+		}
+
+		void refresh()
+		{
+			kills = new ArrayList<>(sessionManager.getAllKills());
+			fireTableDataChanged();
+		}
+
+		@Override
+		public int getRowCount()
+		{
+			return kills.size();
+		}
+
+		@Override
+		public int getColumnCount()
+		{
+			return columns.length;
+		}
+
+		@Override
+		public String getColumnName(int column)
+		{
+			return columns[column];
+		}
+
+		@Override
+		public Object getValueAt(int rowIndex, int columnIndex)
+		{
+			Kill k = kills.get(rowIndex);
+			switch (columnIndex)
+			{
+				case 0:
+					return Formats.getLocalTime().format(java.time.ZonedDateTime.ofInstant(k.getAt(), java.time.ZoneId.systemDefault()));
+				case 1:
+					return k.getPlayer();
+				case 2:
+					return k.getAmount();
+				case 3:
+					return k.getType() == null ? "LOOT" : k.getType();
+			}
+			return null;
+		}
+
+		@Override
+		public boolean isCellEditable(int rowIndex, int columnIndex)
+		{
+			return columnIndex == 1 || columnIndex == 2;
+		}
+
+		@Override
+		public void setValueAt(Object aValue, int rowIndex, int columnIndex)
+		{
+			Kill k = kills.get(rowIndex);
+			if (columnIndex == 1)
+			{
+				k.setPlayer(aValue.toString());
+			}
+			else if (columnIndex == 2)
+			{
+				try
+				{
+					k.setAmount(Long.parseLong(aValue.toString()));
+				}
+				catch (NumberFormatException ignored) {}
+			}
+			sessionManager.saveToConfig();
+			controller.refreshAllView();
+			fireTableCellUpdated(rowIndex, columnIndex);
+		}
+	}
+
+	private void toggleEditMode()
+	{
+		editMode = !editMode;
+		updateDashboardContent();
+		if (!editMode)
+		{
+			refreshGraph();
+		}
 	}
 
 	private JComponent wrapSidebar(Component[] sidebarComponents)
@@ -205,9 +408,33 @@ public class PopoutView extends PanelView
 	}
 
 	@Override
-	protected void onMetricsRefreshed()
+	public void onMetricsRefreshed()
 	{
 		refreshGraph();
+		refreshHistoryEditor();
+	}
+
+	private void refreshHistoryEditor()
+	{
+		if (editContainer == null) return;
+		if (editContainer instanceof JPanel)
+		{
+			for (Component c : ((JPanel) editContainer).getComponents())
+			{
+				if (c instanceof JScrollPane)
+				{
+					JScrollPane scroll = (JScrollPane) c;
+					if (scroll.getViewport().getView() instanceof JTable)
+					{
+						JTable table = (JTable) scroll.getViewport().getView();
+						if (table.getModel() instanceof HistoryTableModel)
+						{
+							((HistoryTableModel) table.getModel()).refresh();
+						}
+					}
+				}
+			}
+		}
 	}
 
 	private void refreshGraph()
@@ -262,5 +489,82 @@ public class PopoutView extends PanelView
 	private boolean shouldShowSleepingPlayersInGraph()
 	{
 		return showSleepingPlayersToggle == null || showSleepingPlayersToggle.isSelected();
+	}
+
+	private class HistoryTransferHandler extends TransferHandler
+	{
+		private final HistoryTableModel model;
+
+		HistoryTransferHandler(HistoryTableModel model)
+		{
+			this.model = model;
+		}
+
+		@Override
+		public int getSourceActions(JComponent c)
+		{
+			return MOVE;
+		}
+
+		@Override
+		protected Transferable createTransferable(JComponent c)
+		{
+			JTable table = (JTable) c;
+			int index = table.getSelectedRow();
+			return new Transferable()
+			{
+				@Override
+				public DataFlavor[] getTransferDataFlavors()
+				{
+					return new DataFlavor[]{DataFlavor.stringFlavor};
+				}
+
+				@Override
+				public boolean isDataFlavorSupported(DataFlavor flavor)
+				{
+					return DataFlavor.stringFlavor.equals(flavor);
+				}
+
+				@Override
+				public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException
+				{
+					return String.valueOf(index);
+				}
+			};
+		}
+
+		@Override
+		public boolean canImport(TransferSupport support)
+		{
+			return support.isDataFlavorSupported(DataFlavor.stringFlavor);
+		}
+
+		@Override
+		public boolean importData(TransferSupport support)
+		{
+			if (!canImport(support))
+			{
+				return false;
+			}
+			try
+			{
+				String data = (String) support.getTransferable().getTransferData(DataFlavor.stringFlavor);
+				int fromIndex = Integer.parseInt(data);
+				JTable.DropLocation dl = (JTable.DropLocation) support.getDropLocation();
+				int toIndex = dl.getRow();
+
+				if (fromIndex != toIndex)
+				{
+					sessionManager.moveKill(fromIndex, toIndex);
+					model.refresh();
+					controller.refreshAllView();
+				}
+				return true;
+			}
+			catch (Exception e)
+			{
+				return false;
+			}
+		}
 	}
 }

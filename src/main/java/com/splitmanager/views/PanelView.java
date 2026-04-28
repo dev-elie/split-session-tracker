@@ -24,18 +24,25 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.event.KeyEvent;
+import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
+import java.awt.image.BufferedImage;
+import javax.swing.ImageIcon;
+import net.runelite.client.util.ImageUtil;
+import net.runelite.client.util.SwingUtil;
 import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.FormatStyle;
 import java.util.List;
 import java.util.Locale;
 import javax.swing.AbstractAction;
@@ -75,9 +82,10 @@ import net.runelite.client.ui.PluginPanel;
  */
 public class PanelView extends PluginPanel
 {
-	private final ManagerSession sessionManager;
-	private final PluginConfig config;
-	private final ManagerKnownPlayers playerManager;
+	protected final ManagerSession sessionManager;
+	protected final PluginConfig config;
+	protected final ManagerKnownPlayers playerManager;
+	protected PanelController controller;
 	private final JComboBox<String> knownPlayersDropdown = new JComboBox<>();
 	private final JTextField newPlayerField = new JTextField();
 	private final JLabel historyLabel = new JLabel("History: OFF");
@@ -119,17 +127,30 @@ public class PanelView extends PluginPanel
 	private PanelActions actions;
 	private JButton btnCopyJson;
 	private JButton btnCopyMd;
+	protected final JButton btnToggleEdit;
+	protected final JButton btnPopout;
 	private DropdownRip detectedValuesDropdown;
-	private static final DateTimeFormatter HISTORY_TIME_FORMAT =
-		DateTimeFormatter.ofPattern("dd-MMM HH:mm", Locale.ENGLISH).withZone(ZoneId.systemDefault());
 
 	public PanelView(ManagerSession sessionManager, PluginConfig config, ManagerKnownPlayers playerManager, PanelController controller)
 	{
 		this.sessionManager = sessionManager;
 		this.config = config;
 		this.playerManager = playerManager;
+		this.controller = controller;
 		bindActions(controller);
 		bindEnterSubmits();
+
+		final BufferedImage editIcon = ImageUtil.loadImageResource(PanelView.class, "/com/splitmanager/icons/icon.png");
+		btnToggleEdit = new JButton("\uD83D\uDD89");
+		btnToggleEdit.setToolTipText("Toggle history editor");
+		btnToggleEdit.setPreferredSize(new Dimension(24, 24));
+		SwingUtil.removeButtonDecorations(btnToggleEdit);
+		btnToggleEdit.addActionListener(e -> onPencilClicked());
+		btnPopout = new JButton("\uD83D\uDDE0");
+		btnPopout.setToolTipText("Pop out");
+		btnPopout.setPreferredSize(new Dimension(24, 24));
+		SwingUtil.removeButtonDecorations(btnPopout);
+		btnPopout.addActionListener(e -> onPopoutClicked());
 
 		recentSplitsModel = new RecentSplitsTable(config);
 		recentSplitsModel.setListener(editedKill -> {
@@ -915,7 +936,29 @@ public class PanelView extends PluginPanel
 		scroller.setPreferredSize(new Dimension(0, 140));
 		String tooltip = " Tip: You can edit 'Player'* and 'Amount' by double clicking the respective field.\n" +
 			" *Do to limitations you can only change players to the already participating players.";
-		return new DropdownRip("Recent splits", scroller, config.enableTour(), tooltip);
+
+		JPanel extraButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+		extraButtons.setOpaque(false);
+		extraButtons.add(btnToggleEdit);
+		extraButtons.add(btnPopout);
+
+		return new DropdownRip("Recent splits", scroller, config.enableTour(), tooltip, extraButtons);
+	}
+
+	protected void onPencilClicked()
+	{
+		if (actions != null)
+		{
+			actions.togglePopout(true);
+		}
+	}
+
+	protected void onPopoutClicked()
+	{
+		if (actions != null)
+		{
+			actions.togglePopout(false);
+		}
 	}
 
 	private JComponent generateHistoryPanel()
@@ -1232,7 +1275,7 @@ public class PanelView extends PluginPanel
 			Instant start = session.getStart();
 			String label = start == null
 				? "Unknown start"
-				: HISTORY_TIME_FORMAT.format(start);
+				: Formats.getLocalDate().format(start) + " " + Formats.getLocalTime().format(start);
 			if (session.getEnd() != null)
 			{
 				label += " - " + formatDuration(start, session.getEnd()) + " long";

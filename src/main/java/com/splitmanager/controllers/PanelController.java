@@ -13,6 +13,7 @@ import com.splitmanager.utils.MarkdownFormatter;
 import static com.splitmanager.utils.Utils.toast;
 import com.splitmanager.views.PanelView;
 import java.awt.Toolkit;
+import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.util.List;
 import javax.swing.DefaultCellEditor;
@@ -476,6 +477,12 @@ public class PanelController implements PanelActions
 				sessionManager.getCurrentSession().orElse(null), true), config);
 		StringSelection selection = new StringSelection(payload);
 		Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+	}
+
+	@Override
+	public void togglePopout(boolean editMode)
+	{
+		managerPanel.togglePopOutWindow(editMode);
 	}
 
 	// Tutorial control implementations to keep view passive

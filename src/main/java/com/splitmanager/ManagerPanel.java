@@ -32,7 +32,6 @@ public class ManagerPanel
 	private final PluginConfig config;
 	private final ManagerKnownPlayers playerManager;
 	private JFrame popoutFrame;
-	private JButton popOutBtn;
 	private PanelController controller;
 	private PanelController popoutController;
 	private PopoutView popoutView;
@@ -78,48 +77,28 @@ public class ManagerPanel
 		view = new PanelView(manager, config, playerManager, controller);
 		controller.setView(view);
 
-		popOutBtn = new JButton("Pop Out");
-		popOutBtn.addActionListener(e -> togglePopOutWindow());
-		JPanel topBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 5));
-		topBar.add(popOutBtn);
-		addTopBar(topBar);
-
 		controller.refreshAllView();
 	}
 
-	private void addTopBar(JPanel topBar)
-	{
-		Component[] existingComponents = view.getComponents();
-		view.removeAll();
-
-		JPanel wrapper = new JPanel();
-		wrapper.setLayout(new BoxLayout(wrapper, BoxLayout.Y_AXIS));
-		wrapper.add(topBar);
-		for (Component component : existingComponents)
-		{
-			wrapper.add(component);
-		}
-		view.add(wrapper, BorderLayout.NORTH);
-	}
-
-
-	private void togglePopOutWindow()
+	public void togglePopOutWindow(boolean startInEditMode)
 	{
 		if (popoutFrame != null && popoutFrame.isDisplayable())
 		{
 			popoutFrame.toFront();
 			popoutFrame.requestFocus();
+			if (startInEditMode && popoutView != null)
+			{
+				popoutView.setEditMode(true);
+			}
 			return;
-		}
-		if (popOutBtn != null)//hide button if window open
-		{
-			popOutBtn.setVisible(false);
-			view.revalidate();
-			view.repaint();
 		}
 
 		popoutController = new PanelController(manager, config, playerManager, this);
 		popoutView = new PopoutView(manager, config, playerManager, popoutController);
+		if (startInEditMode)
+		{
+			popoutView.setEditMode(true);
+		}
 		popoutController.setView(popoutView);
 
 		popoutController.refreshAllView();
@@ -141,12 +120,6 @@ public class ManagerPanel
 				popoutFrame = null;
 				popoutController = null;
 				popoutView = null;
-				if (popOutBtn != null)
-				{
-					popOutBtn.setVisible(true);
-					view.revalidate();
-					view.repaint();
-				}
 			}
 		});
 	}

@@ -10,10 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 public final class RecentSplitsTable extends javax.swing.table.AbstractTableModel
 {
 	private static final String[] COLS = {"Time", "Player", "Amount"};
-	private static final java.time.format.DateTimeFormatter TIME_FMT =
-		java.time.format.DateTimeFormatter
-			.ofLocalizedTime(java.time.format.FormatStyle.SHORT)
-			.withLocale(java.util.Locale.getDefault());
 	private static final java.time.ZoneId SYS_TZ = java.time.ZoneId.systemDefault();
 	private final java.util.List<Row> rows = new java.util.ArrayList<>(10);
 	private final PluginConfig config;
@@ -135,7 +131,7 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 		String timeStr = "";
 		if (k.getAt() != null)
 		{
-			timeStr = TIME_FMT.format(java.time.ZonedDateTime.ofInstant(k.getAt(), SYS_TZ));
+			timeStr = Formats.getLocalTime().format(java.time.ZonedDateTime.ofInstant(k.getAt(), SYS_TZ));
 		}
 		// newest on top (insert at index 0)
 		rows.add(0, new Row(k, timeStr));

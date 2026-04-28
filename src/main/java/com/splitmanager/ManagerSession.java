@@ -41,6 +41,90 @@ public class ManagerSession
 	private final SplitCalculator splitCalculator;
 	// Cache of all kills grouped by mother session id to avoid recomputing on every UI refresh
 	private final Map<String, List<Kill>> motherKillsCache = new LinkedHashMap<>();
+
+	/**
+	 * Force a full rebuild of the kills cache for the current session's thread.
+	 */
+	public void invalidateKillsCache()
+	{
+		getCurrentSession().ifPresent(curr -> {
+			String motherId = (curr.getMotherId() == null) ? curr.getId() : curr.getMotherId();
+			motherKillsCache.remove(motherId);
+		});
+	}
+
+	public void insertKillAt(int index, String player, Long amount)
+	{
+		getCurrentSession().ifPresent(curr -> {
+			String mainPlayer = resolveMainName(player);
+			if (mainPlayer == null)
+			{
+				return;
+			}
+			Kill kill = new Kill(curr.getId(), mainPlayer, amount, Instant.now());
+			kill.setType(Kill.TYPE_LOOT);
+			curr.getKills().add(kill);
+			invalidateKillsCache();
+			saveToConfig();
+		});
+	}
+
+	public void removeKillAt(int index)
+	{
+		List<Kill> allKills = getAllKills();
+		if (index < 0 || index >= allKills.size())
+		{
+			return;
+		}
+		Kill killToRemove = allKills.get(index);
+		for (Session s : sessions.values())
+		{
+			if (s.getId().equals(killToRemove.getSessionId()))
+			{
+				s.getKills().remove(killToRemove);
+				break;
+			}
+		}
+		invalidateKillsCache();
+		saveToConfig();
+	}
+
+	public void moveKill(int fromIndex, int toIndex)
+	{
+		List<Kill> allKills = getAllKills();
+		if (fromIndex < 0 || fromIndex >= allKills.size() || toIndex < 0 || toIndex >= allKills.size())
+		{
+			return;
+		}
+
+		Kill kill = allKills.get(fromIndex);
+		// Since kills are spread across sessions, "moving" is tricky.
+		// For simplicity, we'll remove it from its source session and add it to the session of the target index.
+		Kill targetKill = allKills.get(toIndex);
+
+		removeKillAt(fromIndex);
+
+		for (Session s : sessions.values())
+		{
+			if (s.getId().equals(targetKill.getSessionId()))
+			{
+				// We need to find the correct local index in the target session
+				int localTargetIndex = s.getKills().indexOf(targetKill);
+				if (localTargetIndex != -1)
+				{
+					s.getKills().add(localTargetIndex, kill);
+				}
+				else
+				{
+					s.getKills().add(kill);
+				}
+				break;
+			}
+		}
+
+		invalidateKillsCache();
+		saveToConfig();
+	}
 	private String currentSessionId;
 	@Getter
 	private boolean historyLoaded;

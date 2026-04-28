@@ -125,6 +125,13 @@ public interface PanelActions
 	 */
 	void copyMetricsMarkdown();
 
+	/**
+	 * Open or bring to front the popout window.
+	 *
+	 * @param editMode true to start in edit mode
+	 */
+	void togglePopout(boolean editMode);
+
 	// Tutorial controls to keep MVC separation
 	void tourStart();
 
