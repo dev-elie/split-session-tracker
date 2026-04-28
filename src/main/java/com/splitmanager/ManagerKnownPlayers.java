@@ -13,27 +13,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import javax.annotation.Nonnull;
 import javax.inject.Inject;
 import javax.inject.Singleton;
-import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 
 /**
- * This class provides functionality to manage relationships between "main" players
- * and their alternate (alt) players within a gaming or user system. It interacts
- * with backend session management to perform operations like linking, unlinking,
- * and retrieving alt players while also updating the user interface to reflect
- * these changes.
+ * Manages known players and alt-to-main relationships persisted through plugin config.
  */
 @Singleton
+@Slf4j
 public class ManagerKnownPlayers
 {
 	private final Gson gson;
 	private final PluginConfig config;
-	@Getter
-	private Set<String> knownPlayers = new LinkedHashSet<>();
-	@Getter
-	private Map<String, String> altMainMapping = new LinkedHashMap<>();
+	private final Set<String> knownPlayers = new LinkedHashSet<>();
+	private final Map<String, String> altMainMapping = new LinkedHashMap<>();
 
 	@Inject
 	public ManagerKnownPlayers(PluginConfig config, Gson gson)
@@ -76,8 +70,9 @@ public class ManagerKnownPlayers
 					altMainMapping.putAll(m);
 				}
 			}
-			catch (Exception ignored)
+			catch (Exception e)
 			{
+				log.warn("Failed to parse alt mappings from config", e);
 			}
 		}
 	}
@@ -91,8 +86,18 @@ public class ManagerKnownPlayers
 		}
 		catch (Exception e)
 		{
-			// ignore
+			log.warn("Failed to save alt mappings to config", e);
 		}
+	}
+
+	public Set<String> getKnownPlayers()
+	{
+		return Collections.unmodifiableSet(knownPlayers);
+	}
+
+	public Map<String, String> getAltMainMapping()
+	{
+		return Collections.unmodifiableMap(altMainMapping);
 	}
 
 	/**
@@ -100,6 +105,10 @@ public class ManagerKnownPlayers
 	 */
 	public String parseAltFromEntry(String selectedEntry)
 	{
+		if (selectedEntry == null)
+		{
+			return "";
+		}
 		if (selectedEntry.contains(" is an alt of "))
 		{
 			String[] parts = selectedEntry.split(" is an alt of ", 2);
@@ -148,11 +157,12 @@ public class ManagerKnownPlayers
 		{
 			return false;
 		}
-		if (altMainMapping.containsKey(m))
+		if (isAlt(m))
 		{
 			return false;
 		}
-		if (altMainMapping.containsKey(a) && !altMainMapping.get(a).equalsIgnoreCase(m))
+		String existingMain = getMappedMain(a);
+		if (existingMain != null && !existingMain.equalsIgnoreCase(m))
 		{
 			return false;
 		}
@@ -180,7 +190,8 @@ public class ManagerKnownPlayers
 		}
 		String a = alt.trim();
 		String m = main.trim();
-		if (altMainMapping.containsKey(a) && altMainMapping.get(a).equalsIgnoreCase(m))
+		String existingMain = getMappedMain(a);
+		if (existingMain != null && existingMain.equalsIgnoreCase(m))
 		{
 			return true;
 		}
@@ -204,11 +215,12 @@ public class ManagerKnownPlayers
 			return false;
 		}
 		String a = alt.trim();
-		if (!altMainMapping.containsKey(a))
+		String existingAlt = findMappedAltKey(a);
+		if (existingAlt == null)
 		{
 			return false;
 		}
-		altMainMapping.remove(a);
+		altMainMapping.remove(existingAlt);
 		saveToConfig();
 		return true;
 	}
@@ -220,14 +232,22 @@ public class ManagerKnownPlayers
 	 * @param name main or alt name
 	 * @return resolved main name (or the input trimmed if not an alt)
 	 */
-	public String getMainName(@Nonnull String name)
+	public String getMainName(String name)
 	{
+		if (name == null)
+		{
+			return null;
+		}
 		String n = name.trim();
+		if (n.isEmpty())
+		{
+			return null;
+		}
 		String visited = null;
 		// resolve chain up to a few steps to avoid cycles
 		for (int i = 0; i < 5; i++)
 		{
-			String m = altMainMapping.get(n);
+			String m = getMappedMain(n);
 			if (m == null || m.equalsIgnoreCase(n))
 			{
 				return n;
@@ -252,7 +272,7 @@ public class ManagerKnownPlayers
 		{
 			return false;
 		}
-		return altMainMapping.containsKey(name.trim());
+		return findMappedAltKey(name.trim()) != null;
 	}
 
 	/**
@@ -289,7 +309,16 @@ public class ManagerKnownPlayers
 	 */
 	public boolean addKnownPlayer(String name)
 	{
-		boolean added = knownPlayers.add(name.trim());
+		String normalized = name == null ? null : name.trim();
+		if (normalized == null || normalized.isEmpty())
+		{
+			return false;
+		}
+		if (knownPlayers.stream().anyMatch(p -> p.equalsIgnoreCase(normalized)))
+		{
+			return false;
+		}
+		boolean added = knownPlayers.add(normalized);
 		if (added)
 		{
 			saveToConfig();
@@ -297,23 +326,24 @@ public class ManagerKnownPlayers
 		return added;
 	}
 
-	public boolean isKnownPlayer(@Nonnull String name)
+	public boolean isKnownPlayer(String name)
 	{
 		return isKnownPlayer(name, false);
 	}
 
-	public boolean isKnownPlayer(@Nonnull String name, @Nonnull Boolean save)
+	public boolean isKnownPlayer(String name, boolean save)
 	{
-		if (name.trim().isEmpty())
+		if (name == null || name.trim().isEmpty())
 		{
 			return false;
 		}
 
-		boolean known = knownPlayers.contains(name.trim());
+		String normalized = name.trim();
+		boolean known = knownPlayers.stream().anyMatch(p -> p.equalsIgnoreCase(normalized));
 
 		if (save && !known)
 		{
-			addKnownPlayer(name.trim());
+			addKnownPlayer(normalized);
 			return true;
 		}
 
@@ -327,13 +357,42 @@ public class ManagerKnownPlayers
 		{
 			return false;
 		}
-		boolean rem = knownPlayers.remove(n);
+		String knownName = knownPlayers.stream()
+			.filter(p -> p.equalsIgnoreCase(n))
+			.findFirst()
+			.orElse(null);
+		boolean rem = knownName != null && knownPlayers.remove(knownName);
+		String mappedAlt = findMappedAltKey(n);
+		boolean removedAlt = mappedAlt != null && altMainMapping.remove(mappedAlt) != null;
+		boolean removedMainLinks = altMainMapping.entrySet().removeIf(e -> e.getValue() != null && e.getValue().equalsIgnoreCase(n));
 
-		altMainMapping.remove(n);
-		altMainMapping.entrySet().removeIf(e -> e.getValue().equalsIgnoreCase(n));
-
-		saveToConfig();
+		if (rem || removedAlt || removedMainLinks)
+		{
+			saveToConfig();
+		}
 		return rem;
+	}
+
+	private String getMappedMain(String alt)
+	{
+		String key = findMappedAltKey(alt);
+		return key == null ? null : altMainMapping.get(key);
+	}
+
+	private String findMappedAltKey(String alt)
+	{
+		if (alt == null)
+		{
+			return null;
+		}
+		for (String key : altMainMapping.keySet())
+		{
+			if (key != null && key.equalsIgnoreCase(alt))
+			{
+				return key;
+			}
+		}
+		return null;
 	}
 
 	public void init()

@@ -1,98 +1,134 @@
 # Auto Split Manager
 
-A RuneLite plugin for automatically managing and tracking splits in group activities.
+Auto Split Manager is a RuneLite plugin for tracking OSRS group splits without relying on a separate spreadsheet during the raid, trip, or PK session.
 
-| Start the session, to start adding kills | Keep track of who owes what | Keep track of detected chat messages   |
-| ------------- |:-------------:| -----:|
-| <img width="324" height="401" alt="image" src="https://github.com/user-attachments/assets/bd8c4aa4-54d8-4c55-86a6-71c12d398edb" />| <img width="322" height="564" alt="image" src="https://github.com/user-attachments/assets/268324ca-448b-484a-8757-3013ee9e0713" />|<img width="309" height="277" alt="image" src="https://github.com/user-attachments/assets/f172a6e9-0f64-4da1-a2f2-a21fc0088877" />|
+It keeps a session roster, records loot manually or from chat, resolves alts to mains, tracks roster changes across the session, and shows who owes or should receive at the end.
 
-## Features
+## What It Does
 
-- Automatic Value Detection: Detect drop values from chat channels (Clan/Friends Chat) and queue them  
-   - Detects PvM drops: Detects drop values from PvM drop messages  
-   - Detects PvP loot: Detects loot values from PvP loot messages  
-   - Detects player !add: Detects values from player `!add` commands in Clan/Friends chat  
-   - TODO -> Detects through item drop name: Detects values from through item drop names  
-- Player Management: Keep track of current participating players with support for alt accounts  
-- Split Calculation: Automatically calculates fair splits based on session participation  
-- Settlement Guidance: View metrics to settle payments between players  
+- Start and stop split sessions from the sidebar
+- Add or remove players from the active roster
+- Link alt accounts to mains so loot is attributed correctly
+- Add values manually with OSRS-style amounts like `300k`, `12.5m`, or `1b`
+- Detect values from clan chat or friends chat
+- Queue detected values for review or auto-apply them when the player is already in session
+- Recalculate fair splits when the roster changes mid-session
+- Show settlement totals and suggested payouts
+- Reopen finished sessions from history
+- Open a popout dashboard with live graphs and session stats
 
-<details>
-  <summary><h2>How It Works</h2></summary>
+## Screenshot Placeholders
 
-### Step 1: Start a session
-Using the plugin panel, start a new session
+> Image placeholder: main sidebar with session controls, detected values, and settlement table
+>
+> Suggested file: `docs/images/sidebar-overview.png`
 
-### Step 2: Add players to your known player list
-Option A: Go to your Chat/Friends/Clan channel, right-click a player and select `Add to session`  
-Option B: In the plugin panel's `Known player info` section, type a player's name in the text box
+> Image placeholder: detected values flow showing queued chat drops and manual apply/remove actions
+>
+> Suggested file: `docs/images/detected-values.png`
 
-### Step 3: Add players to your current session
-Option A: If you used Step 2 Option A, the player is already added to the session  
-Option B: In the `Add players to session` section, select the player from the dropdown and click `Add to session`
+> Image placeholder: popout dashboard with session graph and summary stats
+>
+> Suggested file: `docs/images/popout-dashboard.png`
 
-### Step 4: Add splits to the session
-Manual method: In the `Add split to session` section, select a player, enter an amount (e.g. 300k, 3.4m, 1.23b), and click 'Add'  
-Semi-automatic method:
-1. In settings under `Chat Detection Settings`, enable `Chat detection` and disable `Auto-apply when in session`
-2. When drops are announced in Chat, they'll appear in the `Detected values` section
-3. Select the item and click `Add` (or `Del` to remove)
+> Image placeholder: history picker with a finished session loaded
+>
+> Suggested file: `docs/images/history-mode.png`
 
-Fully automatic method:
-1. In settings under `Chat Detection Settings`, enable both `Chat detection` and `Auto-apply when in session`
-2. Drops will be automatically added for players in the session
+## Typical Flow
 
-### Step 5: Manage players in the session
-Option A: Right-click a player in Chat/Friends/Clan channel and select `Remove from session`  
-Option B: In the plugin panel's `Settlement` section, click the `X` next to a player's name
+### 1. Start a session
 
-### Step 6: View settlements
-Settlement calculations appear automatically in the plugin panel under the `Settlement` section
+Start a new session from the plugin panel before the trip begins.
 
-### Step 7: Stop the session
-Click the Stop button in the plugin panel when finished
+### 2. Build the player list
 
-</details>
+Add known players once, then add them to the active session when they are part of the split. You can also add players from the in-game chat right-click menu.
 
-<details>
-  <summary><h2>Configuration Options</h2></summary>
+If a player uses multiple accounts, link those alts to their main. Drops, pending values, and split math resolve through the main account.
 
-### General Settings
-Enable tour: Enables the tour/explanation of the plugin  
+### 3. Record loot
 
-Enable popout: Add/removes a button that allows the plugin to be shown in a new window  
+You can record loot in three ways:
 
-Default value: The plugin allows the user to select the default value they want to use when inputing splits, meaning that if "m, aka a million" is selected 1 is calculated as 1,000,000.
+- Manual entry from the `Add split to session` section
+- Chat-detected PvM or PvP loot messages
+- Chat `!add` commands such as `!add 100`, `!add 1.2m`, or `!add 100, 200m 300k`
 
-### Settlement Settings
-Copy for Discord: Format Markdown tables with proper spacing for Discord  
+When auto-apply is off, detected values land in the `Detected values` queue first so you can review them. When auto-apply is on, values are applied immediately if the player is already in the active roster.
 
-~Direct payments: Toggle between direct player payments or using a middleman/bank~ Disabled, broken :(  
+### 4. Let the plugin handle roster changes
 
-Flip settlement sign: Change perspective of settlement values (+ means bank pays player vs. player pays bank)
+If people join late or leave early, update the session roster. The plugin keeps the split thread intact and recalculates the settlement based on who was active for each part of the session.
 
-### Chat Detection Settings
-Enable chat detection: Master toggle for detecting values from chat  
+### 5. Review settlement
 
-Detect in Clan/Friends Chat: Choose which chat channels to monitor  
+The settlement section shows totals, split values, and payout guidance. Negative split values mean that player owes. Positive split values mean that player should receive.
 
-Detect PvM/PvP values: Toggle automatic detection of drop and loot messages  
+You can also copy settlement output in Markdown for sharing.
 
-Detect player !add: Allow players to queue values via chat commands  
+### 6. Review history or use the popout
 
-Auto-apply when in session: Automatically apply detected values for players already in session
+Finished sessions can be loaded from the `View history` section. This is useful for checking old runs, reviewing totals, or opening those sessions in the graph dashboard.
 
-</details>
+The popout window gives you a wider view with the normal controls on the left and graphs on the right.
 
-<details>
-  <summary><h2>Alt Account Management</h2></summary>
+## Main Features
 
-The plugin supports linking alt accounts to main accounts, ensuring that values are properly attributed regardless of
-which character is active. All alts are automatically resolved to their main accounts when calculating splits.
+### Chat Detection
 
-</details>
+The plugin can listen to clan chat and friends chat for:
 
+- PvM drops: `received a drop: ... (N coins)`
+- PvP loot: `has defeated ... and received (N coins) worth of loot!`
+- Player commands: `!add ...`
 
-  <h2>Contribute</h2>
+Detected amounts are stored as raw coin values, even if you enter them with `k`, `m`, or `b`.
 
-This plugin is under active development. Contributions, bug reports, and feature requests are welcome.
+### Session-Aware Split Tracking
+
+The plugin does not treat the whole trip as one flat roster. When the team changes after loot has already been recorded, it tracks the session in segments so the final split stays fair.
+
+### Alt-To-Main Resolution
+
+Known alts can be linked to a main account. This prevents split totals from being fragmented across different character names.
+
+### Popout Dashboard
+
+The popout dashboard adds a wider working view and session graph modes:
+
+- `GP/hr over time`
+- `Highest earnings`
+- `Settlement balance`
+
+It also shows quick session stats such as total loot, GP/hr, and top earner.
+
+### Session History
+
+Stopped sessions are kept in history and can be reopened later. This makes it possible to review past sessions without keeping separate notes outside the plugin.
+
+## Configuration Highlights
+
+### General
+
+- Guided tour toggle
+- Default value multiplier for shorthand manual entry
+- Custom time and date formats
+
+### Settlement
+
+- Discord-friendly Markdown copy
+- Settlement display options
+
+### Chat Detection
+
+- Master enable/disable toggle
+- Separate clan chat and friends chat toggles
+- PvM, PvP, and `!add` detection toggles
+- Auto-apply for players already in session
+- Regex overrides for advanced chat parsing setups
+
+## Notes
+
+- This plugin is aimed at the user running the split and keeping the active session accurate.
+- It is most useful when the roster is updated as people join or leave instead of fixing everything after the trip.

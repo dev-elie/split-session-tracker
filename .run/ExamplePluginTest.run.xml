@@ -1,7 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="ExamplePluginTest" type="Application" factoryName="Application" nameIsGenerated="true">
     <option name="MAIN_CLASS_NAME" value="com.example.ExamplePluginTest" />
-    <module name="example.test" />
     <option name="VM_PARAMETERS" value="-ea -Dflatlaf.uiScale=2.2 -Dsun.java2d.uiScale=2.2" />
     <extension name="coverage">
       <pattern>

@@ -80,6 +80,18 @@ public interface PanelActions
 	void deleteSelectedPendingValue(int tableRowIndex);
 
 	/**
+	 * Load a stopped session into read-only history mode.
+	 *
+	 * @param sessionId selected session id
+	 */
+	void loadHistory(String sessionId);
+
+	/**
+	 * Exit read-only history mode.
+	 */
+	void unloadHistory();
+
+	/**
 	 * Handle selection change in known-players list.
 	 *
 	 * @param selected currently selected name
@@ -92,15 +104,16 @@ public interface PanelActions
 	void refreshAllView(); // idempotent, safe to call after model mutations
 
 	/**
+	 * Refresh every open panel that shares the same manager state.
+	 */
+	void refreshSharedViews();
+
+	/**
 	 * Recompute and apply metrics for current session.
 	 */
 	void recomputeMetrics();
 
 	void recomputeMetricsForSession(String sessionId);
-
-	void altPlayerManageAddPlayer(String player);
-
-	void altPlayerManageRemovePlayer(String player);
 
 	/**
 	 * Copy metrics to clipboard in JSON.
@@ -111,6 +124,13 @@ public interface PanelActions
 	 * Copy metrics to clipboard in Markdown.
 	 */
 	void copyMetricsMarkdown();
+
+	/**
+	 * Open or bring to front the popout window.
+	 *
+	 * @param editMode true to start in edit mode
+	 */
+	void togglePopout(boolean editMode);
 
 	// Tutorial controls to keep MVC separation
 	void tourStart();

@@ -2,6 +2,7 @@ package com.splitmanager.views.components;
 
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
@@ -36,20 +37,25 @@ public class DropdownRip extends JPanel
 
 	public DropdownRip(String title, JComponent content)
 	{
-		this(title, content, true, null);
+		this(title, content, true, null, null);
 	}
 
 	public DropdownRip(String title, JComponent content, boolean expanded)
 	{
-		this(title, content, expanded, null);
+		this(title, content, expanded, null, null);
 	}
 
 	public DropdownRip(String title, JComponent content, boolean expanded, String tooltip)
 	{
+		this(title, content, expanded, tooltip, null);
+	}
+
+	public DropdownRip(String title, JComponent content, boolean expanded, String tooltip, JComponent extraComponent)
+	{
 		super(new BorderLayout());
 		this.expanded = expanded;
 
-		header = new Header(title, tooltip);
+		header = new Header(title, tooltip, extraComponent);
 		header.setBorder(new EmptyBorder(3, 0, 0, 0));
 		contentHolder = new JPanel(new BorderLayout());
 		contentHolder.setOpaque(false);
@@ -93,7 +99,7 @@ public class DropdownRip extends JPanel
 
 		private final JButton sectionToggle;
 
-		private Header(String title, String tooltip)
+		private Header(String title, String tooltip, JComponent extraComponent)
 		{
 			super(new BorderLayout());
 
@@ -133,10 +139,20 @@ public class DropdownRip extends JPanel
 			sectionName.setFont(FontManager.getRunescapeBoldFont());
 			sectionHeader.add(sectionName, BorderLayout.CENTER);
 
+			JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+			rightPanel.setOpaque(false);
+
+			if (extraComponent != null)
+			{
+				rightPanel.add(extraComponent);
+			}
+
 			JLabel info = new JLabel("\uD83D\uDEC8"); // info symbol
 			info.setToolTipText(tooltip);
 			info.setVisible(tooltip != null && !tooltip.isEmpty());
-			sectionHeader.add(info, BorderLayout.EAST);
+			rightPanel.add(info);
+
+			sectionHeader.add(rightPanel, BorderLayout.EAST);
 
 			final JPanel sectionContents = new JPanel();
 			sectionContents.setLayout(new DynamicGridLayout(0, 1, 0, 5));

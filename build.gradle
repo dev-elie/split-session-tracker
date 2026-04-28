@@ -1,5 +1,6 @@
 plugins {
 	id 'java'
+	id 'jacoco'
 }
 
 repositories {
@@ -22,16 +23,76 @@ dependencies {
 	annotationProcessor 'org.projectlombok:lombok:1.18.30'
 
 	testImplementation 'junit:junit:4.12'
+	testImplementation 'org.mockito:mockito-core:4.11.0'
 	testImplementation group: 'net.runelite', name:'client', version: runeLiteVersion
 	testImplementation group: 'net.runelite', name:'jshell', version: runeLiteVersion
 }
 
-group = 'com.example'
+group = 'com.splitmanager'
 version = '1.0-SNAPSHOT'
 
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'
 	options.release.set(11)
+}
+
+jacoco {
+	toolVersion = '0.8.12'
+}
+
+def jacocoUnitTestExcludes = [
+	'com/splitmanager/ManagerPlugin*',
+	'com/splitmanager/ManagerPanel*',
+	'com/splitmanager/PluginConfig*',
+	'com/splitmanager/controllers/**',
+	'com/splitmanager/models/Kill*',
+	'com/splitmanager/models/PendingValue*',
+	'com/splitmanager/models/PlayerMetrics*',
+	'com/splitmanager/models/Transfer*',
+	'com/splitmanager/utils/ChatStatusOverlay*',
+	'com/splitmanager/utils/Utils*',
+	'com/splitmanager/views/**'
+]
+
+test {
+	finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+	dependsOn test
+	classDirectories.setFrom(files(classDirectories.files.collect {
+		fileTree(dir: it, exclude: jacocoUnitTestExcludes)
+	}))
+	reports {
+		xml.required = true
+		html.required = true
+	}
+}
+
+jacocoTestCoverageVerification {
+	dependsOn test
+	classDirectories.setFrom(files(classDirectories.files.collect {
+		fileTree(dir: it, exclude: jacocoUnitTestExcludes)
+	}))
+	violationRules {
+		rule {
+			limit {
+				counter = 'LINE'
+				value = 'COVEREDRATIO'
+				minimum = 0.90
+			}
+		}
+	}
+}
+
+check.dependsOn jacocoTestCoverageVerification
+
+tasks.register('run', JavaExec) {
+	group = 'runelite'
+	description = 'Run RuneLite with Auto Split Manager loaded in developer mode.'
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass.set('com.example.ExamplePluginTest')
+	args '--developer-mode', '--debug'
 }
 
 tasks.register('shadowJar', Jar) {

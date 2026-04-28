@@ -58,9 +58,9 @@ public class MarkdownFormatter
 	}
 
 	private static void appendFullTable(List<PlayerMetrics> data,
-										DecimalFormat df,
-										StringBuilder sb,
-										PluginConfig config)
+	                                    DecimalFormat df,
+	                                    StringBuilder sb,
+	                                    PluginConfig config)
 	{
 		List<String[]> rows = new ArrayList<>();
 		int maxPlayer = "Player".length();
@@ -115,8 +115,8 @@ public class MarkdownFormatter
 	}
 
 	private static void appendSimpleTable(List<PlayerMetrics> data,
-										  DecimalFormat df,
-										  StringBuilder sb)
+	                                      DecimalFormat df,
+	                                      StringBuilder sb)
 	{
 		List<String[]> rows = new ArrayList<>();
 		int maxPlayer = "Player".length();

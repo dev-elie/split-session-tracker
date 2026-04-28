@@ -13,6 +13,7 @@ import com.splitmanager.utils.MarkdownFormatter;
 import static com.splitmanager.utils.Utils.toast;
 import com.splitmanager.views.PanelView;
 import java.awt.Toolkit;
+import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.util.List;
 import javax.swing.DefaultCellEditor;
@@ -38,7 +39,6 @@ public class PanelController implements PanelActions
 	private final ManagerPanel managerPanel;
 	@Setter
 	private PanelView view;
-	private Formats.OsrsAmountFormatter formats;
 
 	public PanelController(ManagerSession sessionManager, PluginConfig config, ManagerKnownPlayers playerManager, ManagerPanel managerPanel)
 	{
@@ -46,7 +46,6 @@ public class PanelController implements PanelActions
 		this.playerManager = playerManager;
 		this.config = config;
 		this.managerPanel = managerPanel;
-		this.formats = new Formats.OsrsAmountFormatter();
 	}
 
 	@Override
@@ -75,7 +74,16 @@ public class PanelController implements PanelActions
 			toast(view, "Cannot stop while history loaded.");
 			return;
 		}
-		if (sessionManager.stopSession(view))
+		int res = JOptionPane.showConfirmDialog(view,
+			"Are you sure you want to stop the session?",
+			"Confirm stop",
+			JOptionPane.YES_NO_OPTION,
+			JOptionPane.WARNING_MESSAGE);
+		if (res != JOptionPane.YES_OPTION)
+		{
+			return;
+		}
+		if (sessionManager.stopSession())
 		{
 			managerPanel.refreshAllView();
 		}
@@ -191,16 +199,20 @@ public class PanelController implements PanelActions
 		long amt;
 		try
 		{
-			log.debug("Adding kill for1  {} with amount {}", player, val);
-			//amt = Formats.OsrsAmountFormatter.stringAmountToLongAmount(val,config);
-			//log.debug("Adding kill for2  {} with amount {}", player, amt);
-			amt = Long.parseLong(val);
-			log.debug("Adding kill for3  {} with amount {}", player, amt);
-			// amt = Long.parseLong(val); TODO?????
+			if (rawValue instanceof Number)
+			{
+				amt = ((Number) rawValue).longValue();
+			}
+			else
+			{
+				amt = Formats.OsrsAmountFormatter.stringAmountToLongAmount(val, config);
+			}
+			log.debug("Adding kill for {} with amount {}", player, amt);
 			addKill(player, amt);
 		}
 		catch (Exception ex)
 		{
+			log.warn("Invalid kill amount {}", val, ex);
 			toast(view, "Invalid amount.");
 		}
 	}
@@ -351,6 +363,44 @@ public class PanelController implements PanelActions
 	}
 
 	@Override
+	public void loadHistory(String sessionId)
+	{
+		if (sessionId == null || sessionId.isBlank())
+		{
+			toast(view, "Select a session from history.");
+			return;
+		}
+		if (sessionManager.hasActiveSession())
+		{
+			toast(view, "Stop the current session first.");
+			return;
+		}
+		if (sessionManager.loadHistory(sessionId).isPresent())
+		{
+			toast(view, "History loaded.");
+			managerPanel.refreshAllView();
+		}
+		else
+		{
+			toast(view, "Failed to load history.");
+		}
+		refreshAllView();
+	}
+
+	@Override
+	public void unloadHistory()
+	{
+		if (!sessionManager.isHistoryLoaded())
+		{
+			return;
+		}
+		sessionManager.unloadHistory();
+		toast(view, "History closed.");
+		managerPanel.refreshAllView();
+		refreshAllView();
+	}
+
+	@Override
 	public void onKnownPlayerSelectionChanged(String selected)
 	{
 		refreshAlts();
@@ -363,7 +413,14 @@ public class PanelController implements PanelActions
 		recomputeMetrics();
 		refreshSessionData();
 		refreshWaitlist();
+		refreshHistory();
 		refreshButtonStates();
+	}
+
+	@Override
+	public void refreshSharedViews()
+	{
+		managerPanel.refreshAllView();
 	}
 
 	@Override
@@ -372,7 +429,6 @@ public class PanelController implements PanelActions
 		Session current = sessionManager.getCurrentSession().orElse(null);
 		if (current != null)
 		{
-			((Metrics) view.getMetricsTable().getModel()).setData(sessionManager.computeMetricsFor(current, true));
 			view.refreshMetrics();
 			view.getRecentSplitsModel().setFromKills(sessionManager.getAllKills());
 		}
@@ -406,18 +462,6 @@ public class PanelController implements PanelActions
 	}
 
 	@Override
-	public void altPlayerManageAddPlayer(String player)
-	{
-		//TODO remove
-	}
-
-	@Override
-	public void altPlayerManageRemovePlayer(String player)
-	{
-		//TODO remove
-	}
-
-	@Override
 	public void copyMetricsJson()
 	{
 		String payload = MarkdownFormatter.buildMetricsJson(sessionManager);
@@ -433,6 +477,12 @@ public class PanelController implements PanelActions
 				sessionManager.getCurrentSession().orElse(null), true), config);
 		StringSelection selection = new StringSelection(payload);
 		Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+	}
+
+	@Override
+	public void togglePopout(boolean editMode)
+	{
+		managerPanel.togglePopOutWindow(editMode);
 	}
 
 	// Tutorial control implementations to keep view passive
@@ -461,8 +511,9 @@ public class PanelController implements PanelActions
 		{
 			config.enableTour(false);
 		}
-		catch (Throwable ignored)
+		catch (RuntimeException e)
 		{
+			log.warn("Failed to persist tour disabled state", e);
 		}
 		view.endTour();
 	}
@@ -478,10 +529,30 @@ public class PanelController implements PanelActions
 	private void refreshKnownPlayers()
 	{
 		String[] players = sessionManager.getKnownPlayers().toArray(new String[0]);
-		view.getKnownPlayersDropdown().setModel(new DefaultComboBoxModel<>(players));
+		setModelPreservingSelection(view.getKnownPlayersDropdown(), players);
 		view.getKnownListLabel().setText("Known (" + players.length + "):");
 
 		refreshAlts();
+	}
+
+	private void setModelPreservingSelection(JComboBox<String> comboBox, String[] values)
+	{
+		Object selected = comboBox.getSelectedItem();
+		DefaultComboBoxModel<String> model = new DefaultComboBoxModel<>(values);
+		comboBox.setModel(model);
+		if (selected == null)
+		{
+			return;
+		}
+		String selectedValue = selected.toString();
+		for (String value : values)
+		{
+			if (selectedValue.equals(value))
+			{
+				comboBox.setSelectedItem(selectedValue);
+				return;
+			}
+		}
 	}
 
 	/**
@@ -497,12 +568,13 @@ public class PanelController implements PanelActions
 			String[] notPlayers = sessionManager.getNonActivePlayers().toArray(new String[0]);
 
 			view.getCurrentSessionPlayerDropdown().setEnabled(true);
-			view.getCurrentSessionPlayerDropdown().setModel(new DefaultComboBoxModel<>(sessionPlayers));
-			view.getNotInCurrentSessionPlayerDropdown().setModel(new DefaultComboBoxModel<>(notPlayers));
+			setModelPreservingSelection(view.getCurrentSessionPlayerDropdown(), sessionPlayers);
+			setModelPreservingSelection(view.getNotInCurrentSessionPlayerDropdown(), notPlayers);
 		}
 		else
 		{
-			view.getCurrentSessionPlayerDropdown().setModel(new DefaultComboBoxModel<>(new String[0]));
+			setModelPreservingSelection(view.getCurrentSessionPlayerDropdown(), new String[0]);
+			setModelPreservingSelection(view.getNotInCurrentSessionPlayerDropdown(), new String[0]);
 			view.getCurrentSessionPlayerDropdown().setEnabled(false);
 		}
 
@@ -511,8 +583,6 @@ public class PanelController implements PanelActions
 		Session current = sessionManager.getCurrentSession().orElse(null);
 		if (current != null)
 		{
-			((Metrics) view.getMetricsTable().getModel())
-				.setData(sessionManager.computeMetricsFor(current, true));
 			view.getRecentSplitsModel().setFromKills(sessionManager.getAllKills());
 		}
 		else
@@ -543,6 +613,14 @@ public class PanelController implements PanelActions
 			)));
 	}
 
+	private void refreshHistory()
+	{
+		String selectedSessionId = sessionManager.isHistoryLoaded()
+			? sessionManager.getCurrentSession().map(Session::getId).orElse(null)
+			: view.getSelectedHistorySessionId();
+		view.setHistorySessions(sessionManager.getHistorySessionsNewestFirst(), selectedSessionId);
+	}
+
 	/**
 	 * Updates the enabled or disabled state of various buttons and fields in the user interface.
 	 * The button states are set based on the current session status, player selections, and
@@ -569,6 +647,12 @@ public class PanelController implements PanelActions
 
 		view.getBtnWaitlistAdd().setEnabled(!readOnly && hasActiveSession && waitlistRows > 0);
 		view.getBtnWaitlistDelete().setEnabled(waitlistRows > 0);
+
+		boolean hasHistory = view.getHistorySessionDropdown().getItemCount() > 0;
+		view.getHistorySessionDropdown().setEnabled(!hasActiveSession && hasHistory);
+		view.getBtnViewHistory().setEnabled(!hasActiveSession && hasHistory);
+		view.getBtnUnloadHistory().setEnabled(readOnly);
+		view.getRecentSplitsTable().setEnabled(!readOnly);
 	}
 
 	/**
@@ -602,7 +686,7 @@ public class PanelController implements PanelActions
 			}
 		}
 
-		view.getAddAltDropdown().setModel(new DefaultComboBoxModel<>(eligiblePlayers.toArray(new String[0])));
+		setModelPreservingSelection(view.getAddAltDropdown(), eligiblePlayers.toArray(new String[0]));
 	}
 
 	/**

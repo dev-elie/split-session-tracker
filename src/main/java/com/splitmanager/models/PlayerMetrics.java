@@ -9,15 +9,35 @@ package com.splitmanager.models;
 public class PlayerMetrics
 {
 	public final String player;
-	public final Long total;
-	public final Long split;
+	public final long total;
+	public final long split;
 	public final boolean activePlayer;
 
-	public PlayerMetrics(String player, Long total, Long split, boolean activePlayer)
+	public PlayerMetrics(String player, long total, long split, boolean activePlayer)
 	{
 		this.player = player;
 		this.total = total;
 		this.split = split;
 		this.activePlayer = activePlayer;
+	}
+
+	public String getPlayer()
+	{
+		return player;
+	}
+
+	public long getTotal()
+	{
+		return total;
+	}
+
+	public long getSplit()
+	{
+		return split;
+	}
+
+	public boolean isActivePlayer()
+	{
+		return activePlayer;
 	}
 }

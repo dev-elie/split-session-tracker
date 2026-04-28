@@ -14,6 +14,12 @@ public class WaitlistTable extends AbstractTableModel
 {
 	private final String[] cols = {"Type", "Value", "Player"};
 	private final List<PendingValue> rows = new ArrayList<>();
+	private Runnable editListener;
+
+	public void setEditListener(Runnable editListener)
+	{
+		this.editListener = editListener;
+	}
 
 	public void setData(List<PendingValue> pending)
 	{
@@ -99,6 +105,7 @@ public class WaitlistTable extends AbstractTableModel
 		{
 			pv.setSuggestedPlayer(aValue == null ? null : aValue.toString());
 			fireTableCellUpdated(rowIndex, columnIndex);
+			notifyEdited();
 			return;
 		}
 		if (columnIndex == 1)
@@ -110,11 +117,20 @@ public class WaitlistTable extends AbstractTableModel
 				long parsed = Formats.OsrsAmountFormatter.stringAmountToLongAmount(txt, (PluginConfig) null);
 				pv.setValue(parsed);
 				fireTableCellUpdated(rowIndex, columnIndex);
+				notifyEdited();
 			}
 			catch (ParseException e)
 			{
 				log.warn("Failed to parse amount '{}' for pending value row {}", txt, rowIndex, e);
 			}
+		}
+	}
+
+	private void notifyEdited()
+	{
+		if (editListener != null)
+		{
+			editListener.run();
 		}
 	}
 }

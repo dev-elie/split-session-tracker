@@ -86,7 +86,7 @@ public class RemoveButtonEditor extends DefaultCellEditor
 
 				if (ok)
 				{
-					actions.refreshAllView();
+					actions.refreshSharedViews();
 				}
 			}
 			fireEditingStopped();
