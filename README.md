@@ -1,3 +1,4 @@
+![image](https://img.shields.io/endpoint?url=https://api.runelite.net/pluginhub/shields/installs/plugin/auto-split-manager)
 # Auto Split Manager
 
 Auto Split Manager is a RuneLite plugin for tracking OSRS group splits without relying on a separate spreadsheet during the raid, trip, or PK session.
