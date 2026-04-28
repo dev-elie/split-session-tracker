@@ -179,6 +179,14 @@ public class ManagerPlugin extends Plugin
 			case "enableTour":
 				restartViewFix();
 				break;
+			case "accountForGeTax":
+			case "geTaxMinimumValue":
+			case "geTaxPercent":
+				if (panelManager != null)
+				{
+					panelManager.refreshAllView();
+				}
+				break;
 			case "timeFormat":
 			case "dateFormat":
 				Formats.updateFormats();

@@ -6,7 +6,9 @@ import com.splitmanager.models.PendingValue;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.Session;
 import com.splitmanager.sessions.SplitCalculator;
+import com.splitmanager.utils.Formats;
 import com.splitmanager.utils.InstantTypeAdapter;
+import java.text.ParseException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -801,7 +803,65 @@ public class ManagerSession
 			return List.of();
 		}
 
-		return splitCalculator.compute(s, getThreadSessions(s), playerManager.getKnownPlayers(), includeNonActivePlayers);
+		return splitCalculator.compute(
+			s,
+			getThreadSessions(s),
+			playerManager.getKnownPlayers(),
+			includeNonActivePlayers,
+			buildGeTaxSettings());
+	}
+
+	private SplitCalculator.GeTaxSettings buildGeTaxSettings()
+	{
+		if (config == null || !config.accountForGeTax())
+		{
+			return SplitCalculator.GeTaxSettings.disabled();
+		}
+
+		return new SplitCalculator.GeTaxSettings(
+			true,
+			parseGeTaxMinimumValue(config.geTaxMinimumValue()),
+			sanitizeGeTaxPercent(config.geTaxPercent()),
+			PluginConfig.DEFAULT_GE_TAX_MAX_PER_LOOT);
+	}
+
+	private long parseGeTaxMinimumValue(String configuredValue)
+	{
+		String valueToParse = configuredValue == null || configuredValue.trim().isEmpty()
+			? PluginConfig.DEFAULT_GE_TAX_MINIMUM_VALUE
+			: configuredValue.trim();
+		try
+		{
+			return Formats.OsrsAmountFormatter.stringAmountToLongAmount(valueToParse, null);
+		}
+		catch (ParseException e)
+		{
+			log.warn("Failed to parse GE tax minimum value {}; using default {}", valueToParse, PluginConfig.DEFAULT_GE_TAX_MINIMUM_VALUE, e);
+			return defaultGeTaxMinimumValue();
+		}
+	}
+
+	private long defaultGeTaxMinimumValue()
+	{
+		try
+		{
+			return Formats.OsrsAmountFormatter.stringAmountToLongAmount(PluginConfig.DEFAULT_GE_TAX_MINIMUM_VALUE, null);
+		}
+		catch (ParseException e)
+		{
+			log.warn("Failed to parse built-in GE tax minimum {}; disabling GE tax threshold", PluginConfig.DEFAULT_GE_TAX_MINIMUM_VALUE, e);
+			return 0L;
+		}
+	}
+
+	private double sanitizeGeTaxPercent(double configuredPercent)
+	{
+		if (Double.isNaN(configuredPercent) || Double.isInfinite(configuredPercent) || configuredPercent < 0.0d)
+		{
+			log.warn("Invalid GE tax percent {}; using default {}", configuredPercent, PluginConfig.DEFAULT_GE_TAX_PERCENT);
+			return PluginConfig.DEFAULT_GE_TAX_PERCENT;
+		}
+		return configuredPercent;
 	}
 
 	private List<Session> getThreadSessions(Session s)

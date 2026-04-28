@@ -164,6 +164,39 @@ public class ManagerSessionTest
 	}
 
 	@Test
+	public void testComputeMetricsAppliesConfiguredGeTax()
+	{
+		managerSession.startSession();
+
+		String p1 = "Player1";
+		String p2 = "Player2";
+		when(playerManager.getMainName(p1)).thenReturn(p1);
+		when(playerManager.getMainName(p2)).thenReturn(p2);
+		when(playerManager.getKnownPlayers()).thenReturn(new HashSet<>());
+		when(config.accountForGeTax()).thenReturn(true);
+		when(config.geTaxMinimumValue()).thenReturn("15m");
+		when(config.geTaxPercent()).thenReturn(2.0d);
+
+		managerSession.addPlayerToActive(p1);
+		managerSession.addPlayerToActive(p2);
+
+		Session child = managerSession.getCurrentSession().get();
+
+		PendingValue pv = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 100m", 100000000L, p1);
+		managerSession.addPendingValue(pv);
+		managerSession.applyPendingValueToPlayer(pv.getId(), p1);
+
+		List<PlayerMetrics> metrics = managerSession.computeMetricsFor(child);
+		PlayerMetrics m1 = metrics.stream().filter(m -> m.player.equals(p1)).findFirst().get();
+		PlayerMetrics m2 = metrics.stream().filter(m -> m.player.equals(p2)).findFirst().get();
+
+		assertEquals(100000000L, (long) m1.total);
+		assertEquals(-52000000L, (long) m1.split);
+		assertEquals(0L, (long) m2.total);
+		assertEquals(50000000L, (long) m2.split);
+	}
+
+	@Test
 	public void testComputeMetricsComprehensive()
 	{
 		managerSession.startSession();
