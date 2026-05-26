@@ -477,9 +477,137 @@ public class ManagerSession
 		return gson.toJson(threadSessions);
 	}
 
+	/**
+	 * Import one or more completed history threads from JSON.
+	 * The payload must contain at least one closed mother session and all children must reference
+	 * a root session present in the same payload. Imported sessions are remapped to fresh ids.
+	 *
+	 * @param json JSON payload containing an array of completed sessions
+	 * @return number of imported mother sessions, or 0 when the payload is invalid
+	 */
+	public int importHistorySessionsJson(String json)
+	{
+		if (json == null || json.trim().isEmpty())
+		{
+			return 0;
+		}
+
+		try
+		{
+			Session[] arr = gson.fromJson(json, Session[].class);
+			if (arr == null || arr.length == 0)
+			{
+				return 0;
+			}
+
+			LinkedHashMap<String, Session> importedById = new LinkedHashMap<>();
+			for (Session session : arr)
+			{
+				if (!isImportableHistorySession(session))
+				{
+					return 0;
+				}
+				if (importedById.put(session.getId(), session) != null)
+				{
+					return 0;
+				}
+			}
+
+			List<Session> roots = importedById.values().stream()
+				.filter(session -> session.getMotherId() == null)
+				.collect(Collectors.toList());
+			if (roots.isEmpty())
+			{
+				return 0;
+			}
+
+			for (Session session : importedById.values())
+			{
+				if (session.getMotherId() == null)
+				{
+					continue;
+				}
+				Session mother = importedById.get(session.getMotherId());
+				if (mother == null || mother.getMotherId() != null)
+				{
+					return 0;
+				}
+			}
+
+			List<Session> importedSessions = new ArrayList<>();
+			for (Session root : roots)
+			{
+				String rootId = root.getId();
+				String newRootId = newId();
+				importedSessions.add(copySessionForImport(root, newRootId, null));
+
+				List<Session> children = importedById.values().stream()
+					.filter(session -> rootId.equals(session.getMotherId()))
+					.sorted(Comparator.comparing(Session::getStart))
+					.collect(Collectors.toList());
+				for (Session child : children)
+				{
+					importedSessions.add(copySessionForImport(child, newId(), newRootId));
+				}
+			}
+
+			for (Session session : importedSessions)
+			{
+				sessions.put(session.getId(), session);
+			}
+			motherKillsCache.clear();
+			saveToConfig();
+			return roots.size();
+		}
+		catch (Exception e)
+		{
+			log.warn("Failed to import history sessions from JSON", e);
+			return 0;
+		}
+	}
+
 	private String getRootSessionId(Session session)
 	{
 		return session.getMotherId() == null ? session.getId() : session.getMotherId();
+	}
+
+	private boolean isImportableHistorySession(Session session)
+	{
+		if (session == null || session.getId() == null || session.getStart() == null)
+		{
+			return false;
+		}
+		if (session.isActive())
+		{
+			return false;
+		}
+		if (session.getMotherId() != null && session.getMotherId().trim().isEmpty())
+		{
+			return false;
+		}
+		return true;
+	}
+
+	private Session copySessionForImport(Session source, String id, String motherId)
+	{
+		Session copy = new Session(id, source.getStart(), motherId);
+		copy.setEnd(source.getEnd());
+		if (source.getPlayers() != null)
+		{
+			copy.getPlayers().addAll(source.getPlayers());
+		}
+		if (source.getKills() != null)
+		{
+			for (Kill kill : source.getKills())
+			{
+				if (kill == null)
+				{
+					continue;
+				}
+				copy.getKills().add(copyKillForSession(kill, id));
+			}
+		}
+		return copy;
 	}
 
 	/**

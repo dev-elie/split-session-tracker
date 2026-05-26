@@ -13,9 +13,13 @@ import com.splitmanager.utils.MarkdownFormatter;
 import static com.splitmanager.utils.Utils.toast;
 import com.splitmanager.views.PanelView;
 import java.awt.Color;
+import java.awt.HeadlessException;
 import java.awt.Toolkit;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.UnsupportedFlavorException;
+import java.io.IOException;
 import java.util.List;
 import javax.swing.DefaultCellEditor;
 import javax.swing.DefaultComboBoxModel;
@@ -415,7 +419,7 @@ public class PanelController implements PanelActions
 		Object[] options = {"All history", "Selected session", "Cancel"};
 		int choice = JOptionPane.showOptionDialog(view,
 			"Export all history or the currently selected session?",
-			"Export history",
+			"Export",
 			JOptionPane.DEFAULT_OPTION,
 			JOptionPane.QUESTION_MESSAGE,
 			null,
@@ -445,6 +449,30 @@ public class PanelController implements PanelActions
 			copyToClipboard(payload);
 			toast(view, "Selected history JSON copied.");
 		}
+	}
+
+	@Override
+	public void importHistoryFromClipboard()
+	{
+		String clipboard = readClipboardText();
+		if (clipboard == null || clipboard.trim().isEmpty())
+		{
+			toast(view, "Clipboard does not contain history JSON.");
+			return;
+		}
+
+		int importedThreads = sessionManager.importHistorySessionsJson(clipboard);
+		if (importedThreads <= 0)
+		{
+			toast(view, "No valid history found in clipboard.");
+			return;
+		}
+
+		managerPanel.refreshAllView();
+		refreshAllView();
+		toast(view, importedThreads == 1
+			? "Imported 1 history thread from clipboard."
+			: "Imported " + importedThreads + " history threads from clipboard.");
 	}
 
 	@Override
@@ -528,6 +556,20 @@ public class PanelController implements PanelActions
 	{
 		StringSelection selection = new StringSelection(payload);
 		Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+	}
+
+	private String readClipboardText()
+	{
+		try
+		{
+			Object data = Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor);
+			return data == null ? null : data.toString();
+		}
+		catch (UnsupportedFlavorException | IOException | IllegalStateException | HeadlessException e)
+		{
+			log.warn("Failed to read clipboard text", e);
+			return null;
+		}
 	}
 
 	@Override
@@ -721,6 +763,7 @@ public class PanelController implements PanelActions
 		view.getBtnViewHistory().setEnabled(!hasActiveSession && hasHistory);
 		view.getBtnUnloadHistory().setEnabled(historyMode);
 		view.getBtnExportHistory().setEnabled(hasHistory);
+		view.getBtnImportHistory().setEnabled(true);
 		view.getRecentSplitsTable().setEnabled(!historyMode);
 	}
 

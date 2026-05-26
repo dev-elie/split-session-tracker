@@ -99,6 +99,11 @@ public interface PanelActions
 	void exportHistory(String selectedSessionId);
 
 	/**
+	 * Import history JSON from the clipboard.
+	 */
+	void importHistoryFromClipboard();
+
+	/**
 	 * Handle selection change in known-players list.
 	 *
 	 * @param selected currently selected name

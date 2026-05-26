@@ -116,7 +116,8 @@ public class PanelView extends PluginPanel
 	private final JComboBox<HistorySessionItem> historySessionDropdown = new JComboBox<>();
 	private final JButton btnViewHistory = new JButton("View");
 	private final JButton btnUnloadHistory = new JButton("Close");
-	private final JButton btnExportHistory = new JButton("Export history");
+	private final JButton btnExportHistory = new JButton("Export");
+	private final JButton btnImportHistory = new JButton("Import clipboard");
 	private final JButton btnAddToSession = new JButton("Add");
 	private final JButton btnRemoveFromSession = new JButton("Remove");
 	private final JComboBox<String> currentSessionPlayerDropdown = new JComboBox<>();
@@ -348,6 +349,7 @@ public class PanelView extends PluginPanel
 		btnViewHistory.addActionListener(e -> actions.loadHistory(getSelectedHistorySessionId()));
 		btnUnloadHistory.addActionListener(e -> actions.unloadHistory());
 		btnExportHistory.addActionListener(e -> actions.exportHistory(getSelectedHistorySessionId()));
+		btnImportHistory.addActionListener(e -> actions.importHistoryFromClipboard());
 		waitlistTable.addMouseListener(new java.awt.event.MouseAdapter()
 		{
 			@Override
@@ -1030,21 +1032,21 @@ public class PanelView extends PluginPanel
 		gbc.fill = GridBagConstraints.HORIZONTAL;
 		historyPanel.add(historySessionDropdown, gbc);
 
-		JPanel buttons = new JPanel(new GridLayout(1, 2, 6, 0));
+		JPanel buttons = new JPanel(new GridLayout(1, 2, 6, 6));
 		buttons.add(btnViewHistory);
 		buttons.add(btnUnloadHistory);
+
 		gbc.gridx = 0;
 		gbc.gridy = 1;
 		gbc.gridwidth = 2;
 		gbc.weightx = 1.0;
 		historyPanel.add(buttons, gbc);
 
-		gbc.gridx = 0;
 		gbc.gridy = 2;
-		gbc.gridwidth = 2;
-		gbc.weightx = 1.0;
-		gbc.fill = GridBagConstraints.HORIZONTAL;
-		historyPanel.add(btnExportHistory, gbc);
+		historyPanel.add(btnExportHistory,gbc);
+
+		gbc.gridy = 3;
+		historyPanel.add(btnImportHistory,gbc);
 
 		return new DropdownRip("View history", historyPanel, false,
 			"Load a stopped session. Close history to start a new session.");

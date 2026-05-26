@@ -110,6 +110,65 @@ public class ManagerSessionTest
 	}
 
 	@Test
+	public void testImportHistorySessionsRemapsIdsAndPreservesMotherThread()
+	{
+		managerSession.startSession();
+		String p1 = "Player1";
+		resolveToSelf(p1);
+		managerSession.addPlayerToActive(p1);
+		managerSession.addKill(p1, 100000L);
+		managerSession.stopSession();
+
+		Session sourceRoot = managerSession.getHistorySessionsNewestFirst().get(0);
+		String json = managerSession.exportSessionThreadJson(sourceRoot.getId());
+
+		ManagerSession imported = new ManagerSession(config, playerManager, pluginManager, gson);
+		int importedThreads = imported.importHistorySessionsJson(json);
+
+		assertEquals(1, importedThreads);
+		assertEquals(2, imported.getAllSessionsNewestFirst().size());
+		assertTrue(imported.getCurrentSession().isEmpty());
+
+		Session importedRoot = imported.getHistorySessionsNewestFirst().get(0);
+		assertTrue(importedRoot.getMotherId() == null);
+		assertTrue(!sourceRoot.getId().equals(importedRoot.getId()));
+		assertFalse(importedRoot.isActive());
+
+		Session importedChild = imported.getAllSessionsNewestFirst().stream()
+			.filter(session -> importedRoot.getId().equals(session.getMotherId()))
+			.findFirst()
+			.orElse(null);
+		assertNotNull(importedChild);
+		assertEquals(importedRoot.getId(), importedChild.getMotherId());
+		assertEquals(2, importedChild.getKills().size());
+		assertTrue(importedChild.getKills().stream().anyMatch(kill -> p1.equals(kill.getPlayer()) && Long.valueOf(100000L).equals(kill.getAmount())));
+		assertTrue(importedChild.getKills().stream().allMatch(kill -> importedChild.getId().equals(kill.getSessionId())));
+	}
+
+	@Test
+	public void testImportHistorySessionsRejectsChildWithoutMother()
+	{
+		Session child = new Session("child", Instant.EPOCH.plusSeconds(1), "missing-mother");
+		child.setEnd(Instant.EPOCH.plusSeconds(2));
+		String json = gson.toJson(new Session[]{child});
+
+		assertEquals(0, managerSession.importHistorySessionsJson(json));
+		assertTrue(managerSession.getAllSessionsNewestFirst().isEmpty());
+	}
+
+	@Test
+	public void testImportHistorySessionsRejectsActiveSessions()
+	{
+		Session mother = new Session("mother", Instant.EPOCH, null);
+		mother.setEnd(Instant.EPOCH.plusSeconds(1));
+		Session child = new Session("child", Instant.EPOCH.plusSeconds(2), "mother");
+		String json = gson.toJson(new Session[]{mother, child});
+
+		assertEquals(0, managerSession.importHistorySessionsJson(json));
+		assertTrue(managerSession.getAllSessionsNewestFirst().isEmpty());
+	}
+
+	@Test
 	public void testAddPlayerToActive()
 	{
 		managerSession.startSession();
