@@ -631,7 +631,7 @@ public class PanelController implements PanelActions
 
 		if (sessionManager.isHistoryLoaded())
 		{
-			view.getHistoryLabel().setText("HISTORY LOADED - read only");
+			view.getHistoryLabel().setText("HISTORY LOADED");
 			view.getHistoryLabel().setOpaque(true);
 			view.getHistoryLabel().setBackground(new Color(132, 84, 0));
 			view.getHistoryLabel().setForeground(Color.WHITE);
@@ -692,20 +692,20 @@ public class PanelController implements PanelActions
 	/**
 	 * Updates the enabled or disabled state of various buttons and fields in the user interface.
 	 * The button states are set based on the current session status, player selections, and
-	 * whether the session is in a read-only mode.
+	 * whether a completed history session is currently loaded.
 	 */
 	private void refreshButtonStates()
 	{
-		boolean readOnly = sessionManager.isHistoryLoaded();
+		boolean historyMode = sessionManager.isHistoryLoaded();
 		boolean hasActiveSession = sessionManager.hasActiveSession();
 
-		view.getBtnStart().setEnabled(readOnly || !hasActiveSession);
-		view.getBtnStop().setEnabled(readOnly || hasActiveSession);
-		view.getBtnAddToSession().setEnabled(!readOnly && hasActiveSession);
-		view.getNotInCurrentSessionPlayerDropdown().setEnabled(!readOnly && hasActiveSession);
-		view.getBtnRemoveFromSession().setEnabled(!readOnly && hasActiveSession);
+		view.getBtnStart().setEnabled(historyMode || !hasActiveSession);
+		view.getBtnStop().setEnabled(historyMode || hasActiveSession);
+		view.getBtnAddToSession().setEnabled(!historyMode && hasActiveSession);
+		view.getNotInCurrentSessionPlayerDropdown().setEnabled(!historyMode && hasActiveSession);
+		view.getBtnRemoveFromSession().setEnabled(!historyMode && hasActiveSession);
 
-		boolean canAddKill = !readOnly && hasActiveSession;
+		boolean canAddKill = !historyMode && hasActiveSession;
 		boolean hasSessionPlayers = view.getCurrentSessionPlayerDropdown().getItemCount() > 0;
 
 		view.getBtnAddKill().setEnabled(canAddKill && hasSessionPlayers);
@@ -713,15 +713,15 @@ public class PanelController implements PanelActions
 
 		int waitlistRows = view.getWaitlistTableModel().getRowCount();
 
-		view.getBtnWaitlistAdd().setEnabled(!readOnly && hasActiveSession && waitlistRows > 0);
+		view.getBtnWaitlistAdd().setEnabled(!historyMode && hasActiveSession && waitlistRows > 0);
 		view.getBtnWaitlistDelete().setEnabled(waitlistRows > 0);
 
 		boolean hasHistory = view.getHistorySessionDropdown().getItemCount() > 0;
 		view.getHistorySessionDropdown().setEnabled(!hasActiveSession && hasHistory);
 		view.getBtnViewHistory().setEnabled(!hasActiveSession && hasHistory);
-		view.getBtnUnloadHistory().setEnabled(readOnly);
+		view.getBtnUnloadHistory().setEnabled(historyMode);
 		view.getBtnExportHistory().setEnabled(hasHistory);
-		view.getRecentSplitsTable().setEnabled(!readOnly);
+		view.getRecentSplitsTable().setEnabled(!historyMode);
 	}
 
 	/**

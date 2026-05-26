@@ -551,7 +551,7 @@ public class ManagerSession
 	}
 
 	/**
-	 * Exit read-only history mode and return to live mode.
+	 * Exit history mode and return to live mode.
 	 * Persists the flag immediately.
 	 */
 	public void unloadHistory()
@@ -565,7 +565,7 @@ public class ManagerSession
 	}
 
 	/**
-	 * Enter read-only history mode by selecting a session to view.
+	 * Enter history mode by selecting a completed session to view or edit.
 	 * Requires that no active session is running. Persists the flag immediately.
 	 *
 	 * @param sessionId id of the session (mother or child) to load

@@ -1047,7 +1047,7 @@ public class PanelView extends PluginPanel
 		historyPanel.add(btnExportHistory, gbc);
 
 		return new DropdownRip("View history", historyPanel, false,
-			"Load a stopped session in read-only mode. Close history to start a new session.");
+			"Load a stopped session. Close history to start a new session.");
 	}
 
 	private JComponent generateMetrics()
