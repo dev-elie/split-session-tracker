@@ -101,6 +101,71 @@ public class ChatDetectionServiceTest
 	}
 
 	@Test
+	public void addDetectionFallsBackForInvalidValueSeparatorAndValueRegex()
+	{
+		when(config.addValueSeparatorRegex()).thenReturn("[invalid");
+		when(config.addValueRegex()).thenReturn("[also invalid");
+
+		List<PendingValue> values = service.detect(config, ChatSource.CLAN, null,
+			"!add 100, 200m nope");
+
+		assertEquals(2, values.size());
+		assertEquals(100000L, (long) values.get(0).getValue());
+		assertEquals(200000000L, (long) values.get(1).getValue());
+		assertEquals("", values.get(0).getSuggestedPlayer());
+	}
+
+	@Test
+	public void addDetectionUsesCoinsWhenDefaultMultiplierIsMissing()
+	{
+		when(config.defaultValueMultiplier()).thenReturn(null);
+
+		List<PendingValue> values = service.detect(config, ChatSource.CLAN, "Player1", "!add 123");
+
+		assertEquals(1, values.size());
+		assertEquals(123L, (long) values.get(0).getValue());
+		assertEquals("!add 123 coins", values.get(0).getMessage());
+	}
+
+	@Test
+	public void addDetectionReturnsEmptyForNoCommandBlankValuesAndInvalidAmounts()
+	{
+		assertTrue(service.detect(config, ChatSource.CLAN, "Player1", "hello").isEmpty());
+
+		when(config.addCommandRegex()).thenReturn("^add\\s*(?<values>.*)$");
+		assertTrue(service.detect(config, ChatSource.CLAN, "Player1", "add   ").isEmpty());
+
+		when(config.addCommandRegex()).thenReturn("(?i)^split:\\s*(?<values>.+)$");
+		when(config.addValueRegex()).thenReturn("(?i)^(?<number>[0-9]+)(?<unit>[z])?$");
+		assertTrue(service.detect(config, ChatSource.CLAN, "Player1", "split: 10z").isEmpty());
+	}
+
+	@Test
+	public void pvmDetectionIgnoresMatchesWithoutUsableValue()
+	{
+		when(config.pvmDropRegex()).thenReturn("^DROP (?<player>.+)$");
+
+		List<PendingValue> values = service.detect(config, ChatSource.CLAN, "System",
+			"DROP Player1");
+
+		assertTrue(values.isEmpty());
+	}
+
+	@Test
+	public void pvpDetectionSupportsUnnamedRegexFallbackGroups()
+	{
+		when(config.pvpLootRegex()).thenReturn("^(.+?) pked .+ for ([0-9,]+)$");
+
+		List<PendingValue> values = service.detect(config, ChatSource.FRIENDS, "System",
+			"PKer pked Victim for 321,000");
+
+		assertEquals(1, values.size());
+		assertEquals(PendingValue.Type.PVP, values.get(0).getType());
+		assertEquals("PKer", values.get(0).getSuggestedPlayer());
+		assertEquals(321000L, (long) values.get(0).getValue());
+	}
+
+	@Test
 	public void invalidConfiguredRegexFallsBackToDefault()
 	{
 		when(config.pvmDropRegex()).thenReturn("[not valid");

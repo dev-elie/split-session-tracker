@@ -3,13 +3,14 @@ package com.splitmanager.models;
 
 import com.splitmanager.PluginConfig;
 import com.splitmanager.utils.Formats;
+import java.text.ParseException;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public final class RecentSplitsTable extends javax.swing.table.AbstractTableModel
 {
-	private static final String[] COLS = {"Time", "Player", "Amount"};
+	private static final String[] COLS = {"Time", "Player", "Amount", "Tax"};
 	private static final java.time.ZoneId SYS_TZ = java.time.ZoneId.systemDefault();
 	private final java.util.List<Row> rows = new java.util.ArrayList<>(10);
 	private final PluginConfig config;
@@ -30,7 +31,7 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 	@Override
 	public int getColumnCount()
 	{
-		return 3;
+		return 4;
 	}
 
 	@Override
@@ -54,6 +55,8 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 					return "Left";
 				}
 				return Formats.OsrsAmountFormatter.toSuffixString(e.kill.getAmount(), 'k');
+			case 3:
+				return isGeTaxed(e.kill) ? "*" : "";
 			default:
 				return "";
 		}
@@ -117,6 +120,49 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 		if (listener != null)
 		{
 			listener.onEdited(e.kill); // pass the edited kill so we know its sessionId
+		}
+	}
+
+	private boolean isGeTaxed(Kill kill)
+	{
+		if (kill == null || !kill.isLoot() || kill.getAmount() == null || config == null || !config.accountForGeTax())
+		{
+			return false;
+		}
+		double percent = config.geTaxPercent();
+		if (Double.isNaN(percent) || Double.isInfinite(percent) || percent < 0.0d)
+		{
+			percent = PluginConfig.DEFAULT_GE_TAX_PERCENT;
+		}
+		if (percent <= 0.0d)
+		{
+			return false;
+		}
+		return kill.getAmount() >= geTaxMinimumValue();
+	}
+
+	private long geTaxMinimumValue()
+	{
+		String configured = config.geTaxMinimumValue();
+		String value = configured == null || configured.trim().isEmpty()
+			? PluginConfig.DEFAULT_GE_TAX_MINIMUM_VALUE
+			: configured.trim();
+		try
+		{
+			return Formats.OsrsAmountFormatter.stringAmountToLongAmount(value, null);
+		}
+		catch (ParseException e)
+		{
+			log.warn("Failed to parse GE tax minimum value {}; using default {}", value, PluginConfig.DEFAULT_GE_TAX_MINIMUM_VALUE, e);
+			try
+			{
+				return Formats.OsrsAmountFormatter.stringAmountToLongAmount(PluginConfig.DEFAULT_GE_TAX_MINIMUM_VALUE, null);
+			}
+			catch (ParseException defaultError)
+			{
+				log.warn("Failed to parse built-in GE tax minimum {}; disabling GE tax marker", PluginConfig.DEFAULT_GE_TAX_MINIMUM_VALUE, defaultError);
+				return Long.MAX_VALUE;
+			}
 		}
 	}
 

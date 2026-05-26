@@ -20,6 +20,7 @@ import com.splitmanager.views.components.DropdownRip;
 import com.splitmanager.views.components.PanelTour;
 import com.splitmanager.views.components.table.RemoveButtonEditor;
 import com.splitmanager.views.components.table.RemoveButtonRenderer;
+import com.formdev.flatlaf.extras.FlatSVGIcon;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -33,9 +34,6 @@ import java.awt.Insets;
 import java.awt.event.KeyEvent;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
-import java.awt.image.BufferedImage;
-import javax.swing.ImageIcon;
-import net.runelite.client.util.ImageUtil;
 import net.runelite.client.util.SwingUtil;
 import java.text.ParseException;
 import java.time.Duration;
@@ -55,6 +53,7 @@ import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
+import javax.swing.Icon;
 import javax.swing.JFormattedTextField;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -68,6 +67,7 @@ import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.text.DefaultFormatterFactory;
 import lombok.Getter;
@@ -82,6 +82,12 @@ import net.runelite.client.ui.PluginPanel;
  */
 public class PanelView extends PluginPanel
 {
+	private static final int HEADER_ICON_SIZE = 16;
+	private static final int EDIT_HEADER_ICON_SIZE = 14;
+	private static final int HEADER_BUTTON_SIZE = 24;
+	private static final String EDIT_ICON_PATH = "/com/splitmanager/icons/edit.svg";
+	private static final String GRAPH_ICON_PATH = "/com/splitmanager/icons/graph.svg";
+
 	protected final ManagerSession sessionManager;
 	protected final PluginConfig config;
 	protected final ManagerKnownPlayers playerManager;
@@ -110,6 +116,7 @@ public class PanelView extends PluginPanel
 	private final JComboBox<HistorySessionItem> historySessionDropdown = new JComboBox<>();
 	private final JButton btnViewHistory = new JButton("View");
 	private final JButton btnUnloadHistory = new JButton("Close");
+	private final JButton btnExportHistory = new JButton("Export history");
 	private final JButton btnAddToSession = new JButton("Add");
 	private final JButton btnRemoveFromSession = new JButton("Remove");
 	private final JComboBox<String> currentSessionPlayerDropdown = new JComboBox<>();
@@ -140,16 +147,11 @@ public class PanelView extends PluginPanel
 		bindActions(controller);
 		bindEnterSubmits();
 
-		final BufferedImage editIcon = ImageUtil.loadImageResource(PanelView.class, "/com/splitmanager/icons/icon.png");
-		btnToggleEdit = new JButton("\uD83D\uDD89");
+		btnToggleEdit = makeHeaderIconButton(EDIT_ICON_PATH, "H", EDIT_HEADER_ICON_SIZE);
 		btnToggleEdit.setToolTipText("Toggle history editor");
-		btnToggleEdit.setPreferredSize(new Dimension(24, 24));
-		SwingUtil.removeButtonDecorations(btnToggleEdit);
 		btnToggleEdit.addActionListener(e -> onPencilClicked());
-		btnPopout = new JButton("\uD83D\uDDE0");
+		btnPopout = makeHeaderIconButton(GRAPH_ICON_PATH, "P");
 		btnPopout.setToolTipText("Pop out");
-		btnPopout.setPreferredSize(new Dimension(24, 24));
-		SwingUtil.removeButtonDecorations(btnPopout);
 		btnPopout.addActionListener(e -> onPopoutClicked());
 
 		recentSplitsModel = new RecentSplitsTable(config);
@@ -259,6 +261,46 @@ public class PanelView extends PluginPanel
 		add(top, BorderLayout.NORTH);
 	}
 
+	private static JButton makeHeaderIconButton(String iconPath, String fallbackText)
+	{
+		return makeHeaderIconButton(iconPath, fallbackText, HEADER_ICON_SIZE);
+	}
+
+	private static JButton makeHeaderIconButton(String iconPath, String fallbackText, int iconSize)
+	{
+		Icon icon = loadSvgIcon(iconPath, iconSize);
+		JButton button = icon == null ? new JButton(fallbackText) : new JButton(icon);
+		button.setForeground(Color.WHITE);
+		Dimension size = new Dimension(HEADER_BUTTON_SIZE, HEADER_BUTTON_SIZE);
+		button.setPreferredSize(size);
+		button.setMinimumSize(size);
+		button.setMaximumSize(size);
+		button.setBorder(new EmptyBorder(0, 0, 0, 0));
+		button.setMargin(new Insets(0, 0, 0, 0));
+		button.setIconTextGap(0);
+		button.setHorizontalAlignment(SwingConstants.CENTER);
+		button.setVerticalAlignment(SwingConstants.CENTER);
+		SwingUtil.removeButtonDecorations(button);
+		return button;
+	}
+
+	private static Icon loadSvgIcon(String iconPath)
+	{
+		return loadSvgIcon(iconPath, HEADER_ICON_SIZE);
+	}
+
+	private static Icon loadSvgIcon(String iconPath, int iconSize)
+	{
+		java.net.URL resource = PanelView.class.getResource(iconPath);
+		if (resource == null)
+		{
+			log.warn("Missing SVG icon resource {}", iconPath);
+			return null;
+		}
+
+		return new FlatSVGIcon(resource).derive(iconSize, iconSize);
+	}
+
 	private static String shortenName(String name, int maxLen)
 	{
 		if (name == null)
@@ -305,6 +347,7 @@ public class PanelView extends PluginPanel
 		btnWaitlistDelete.addActionListener(e -> actions.deleteSelectedPendingValue(waitlistTable.getSelectedRow()));
 		btnViewHistory.addActionListener(e -> actions.loadHistory(getSelectedHistorySessionId()));
 		btnUnloadHistory.addActionListener(e -> actions.unloadHistory());
+		btnExportHistory.addActionListener(e -> actions.exportHistory(getSelectedHistorySessionId()));
 		waitlistTable.addMouseListener(new java.awt.event.MouseAdapter()
 		{
 			@Override
@@ -468,6 +511,10 @@ public class PanelView extends PluginPanel
 		javax.swing.table.DefaultTableCellRenderer right = new javax.swing.table.DefaultTableCellRenderer();
 		right.setHorizontalAlignment(SwingConstants.RIGHT);
 		t.getColumnModel().getColumn(2).setCellRenderer(right);
+		javax.swing.table.DefaultTableCellRenderer center = new javax.swing.table.DefaultTableCellRenderer();
+		center.setHorizontalAlignment(SwingConstants.CENTER);
+		t.getColumnModel().getColumn(3).setCellRenderer(center);
+		t.getColumnModel().getColumn(3).setMaxWidth(36);
 
 		// Row-aware player editor
 		final JComboBox<String> playerCombo = new JComboBox<>();
@@ -817,12 +864,12 @@ public class PanelView extends PluginPanel
 		buttonsHalfHalf.add(btnStart);
 		buttonsHalfHalf.add(btnStop);
 
-		g2.gridy = 0;
-		sessionPanel.add(buttonsHalfHalf, g2);
-
 		historyLabel.setHorizontalAlignment(SwingConstants.CENTER);
-		g2.gridy = 1;
+		g2.gridy = 0;
 		sessionPanel.add(historyLabel, g2);
+
+		g2.gridy = 1;
+		sessionPanel.add(buttonsHalfHalf, g2);
 
 		return sessionPanel;
 	}
@@ -940,7 +987,6 @@ public class PanelView extends PluginPanel
 		JPanel extraButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
 		extraButtons.setOpaque(false);
 		extraButtons.add(btnToggleEdit);
-		extraButtons.add(btnPopout);
 
 		return new DropdownRip("Recent splits", scroller, config.enableTour(), tooltip, extraButtons);
 	}
@@ -993,6 +1039,13 @@ public class PanelView extends PluginPanel
 		gbc.weightx = 1.0;
 		historyPanel.add(buttons, gbc);
 
+		gbc.gridx = 0;
+		gbc.gridy = 2;
+		gbc.gridwidth = 2;
+		gbc.weightx = 1.0;
+		gbc.fill = GridBagConstraints.HORIZONTAL;
+		historyPanel.add(btnExportHistory, gbc);
+
 		return new DropdownRip("View history", historyPanel, false,
 			"Load a stopped session in read-only mode. Close history to start a new session.");
 	}
@@ -1012,7 +1065,11 @@ public class PanelView extends PluginPanel
 		btns.add(btnCopyMd);
 		wrapper.add(btns, BorderLayout.SOUTH);
 
-		return new DropdownRip("Settlement information", wrapper);
+		JPanel extraButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+		extraButtons.setOpaque(false);
+		extraButtons.add(btnPopout);
+
+		return new DropdownRip("Settlement information", wrapper, true, null, extraButtons);
 	}
 
 	private void refreshMetricsContent()

@@ -73,59 +73,235 @@ public class ManagerSession
 
 	public void removeKillAt(int index)
 	{
+		removeKillsAt(Collections.singletonList(index));
+	}
+
+	public void removeKillsAt(List<Integer> indices)
+	{
 		List<Kill> allKills = getAllKills();
-		if (index < 0 || index >= allKills.size())
+		if (indices == null || indices.isEmpty())
 		{
 			return;
 		}
-		Kill killToRemove = allKills.get(index);
+		List<Kill> killsToRemove = new ArrayList<>();
+		for (Integer index : indices)
+		{
+			if (index != null && index >= 0 && index < allKills.size())
+			{
+				Kill kill = allKills.get(index);
+				if (!killsToRemove.contains(kill))
+				{
+					killsToRemove.add(kill);
+				}
+			}
+		}
+		if (killsToRemove.isEmpty())
+		{
+			return;
+		}
+
+		repairRostersBeforeRemoving(killsToRemove);
 		for (Session s : sessions.values())
 		{
-			if (s.getId().equals(killToRemove.getSessionId()))
-			{
-				s.getKills().remove(killToRemove);
-				break;
-			}
+			s.getKills().removeAll(killsToRemove);
 		}
 		invalidateKillsCache();
 		saveToConfig();
 	}
 
+	private void repairRostersBeforeRemoving(List<Kill> killsToRemove)
+	{
+		for (Kill kill : killsToRemove)
+		{
+			if (kill == null || !kill.isRosterEvent())
+			{
+				continue;
+			}
+			if (Kill.TYPE_LEFT.equalsIgnoreCase(kill.getType()))
+			{
+				addPlayerFromSessionUntilNextEvent(kill.getSessionId(), kill.getPlayer(), killsToRemove);
+			}
+			else if (Kill.TYPE_JOINED.equalsIgnoreCase(kill.getType()))
+			{
+				removePlayerFromSessionUntilLinkedLeft(kill.getSessionId(), kill.getPlayer(), killsToRemove);
+			}
+		}
+	}
+
+	private void addPlayerFromSessionUntilNextEvent(String sessionId, String player, List<Kill> ignoredEvents)
+	{
+		if (player == null)
+		{
+			return;
+		}
+		for (Session session : sessionsFrom(sessionId))
+		{
+			addPlayerIfMissing(session, player);
+			if (hasRosterEventForPlayer(session, player, ignoredEvents))
+			{
+				return;
+			}
+		}
+	}
+
+	private void removePlayerFromSessionUntilLinkedLeft(String sessionId, String player, List<Kill> ignoredEvents)
+	{
+		if (player == null)
+		{
+			return;
+		}
+		boolean first = true;
+		for (Session session : sessionsFrom(sessionId))
+		{
+			if (!first && hasRosterEventForPlayer(session, player, ignoredEvents))
+			{
+				return;
+			}
+			session.getPlayers().removeIf(existing -> existing.equalsIgnoreCase(player));
+			if (hasIgnoredRosterEventForPlayer(session, player, ignoredEvents, Kill.TYPE_LEFT))
+			{
+				return;
+			}
+			first = false;
+		}
+	}
+
+	private List<Session> sessionsFrom(String sessionId)
+	{
+		Session start = sessions.get(sessionId);
+		if (start == null)
+		{
+			return Collections.emptyList();
+		}
+		List<Session> thread = getThreadSessions(start);
+		int startIndex = thread.indexOf(start);
+		if (startIndex < 0)
+		{
+			return Collections.emptyList();
+		}
+		return thread.subList(startIndex, thread.size());
+	}
+
+	private boolean hasRosterEventForPlayer(Session session, String player, List<Kill> ignoredEvents)
+	{
+		for (Kill kill : session.getKills())
+		{
+			if (kill.isRosterEvent()
+				&& !ignoredEvents.contains(kill)
+				&& player.equalsIgnoreCase(kill.getPlayer()))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private boolean hasIgnoredRosterEventForPlayer(Session session, String player, List<Kill> ignoredEvents, String type)
+	{
+		for (Kill kill : session.getKills())
+		{
+			if (ignoredEvents.contains(kill)
+				&& type.equalsIgnoreCase(kill.getType())
+				&& player.equalsIgnoreCase(kill.getPlayer()))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private void addPlayerIfMissing(Session session, String player)
+	{
+		for (String existing : session.getPlayers())
+		{
+			if (existing.equalsIgnoreCase(player))
+			{
+				return;
+			}
+		}
+		session.getPlayers().add(player);
+	}
+
 	public void moveKill(int fromIndex, int toIndex)
 	{
 		List<Kill> allKills = getAllKills();
-		if (fromIndex < 0 || fromIndex >= allKills.size() || toIndex < 0 || toIndex >= allKills.size())
+		if (fromIndex < 0 || fromIndex >= allKills.size() || toIndex < 0 || toIndex > allKills.size())
+		{
+			return;
+		}
+		if (toIndex == fromIndex || toIndex == fromIndex + 1)
 		{
 			return;
 		}
 
 		Kill kill = allKills.get(fromIndex);
-		// Since kills are spread across sessions, "moving" is tricky.
-		// For simplicity, we'll remove it from its source session and add it to the session of the target index.
-		Kill targetKill = allKills.get(toIndex);
+		List<Kill> remainingKills = new ArrayList<>(allKills);
+		remainingKills.remove(fromIndex);
 
-		removeKillAt(fromIndex);
-
-		for (Session s : sessions.values())
+		int insertionIndex = toIndex;
+		if (fromIndex < insertionIndex)
 		{
-			if (s.getId().equals(targetKill.getSessionId()))
+			insertionIndex--;
+		}
+		insertionIndex = Math.max(0, Math.min(insertionIndex, remainingKills.size()));
+
+		String targetSessionId = currentSessionId;
+		if (!remainingKills.isEmpty())
+		{
+			int targetIndex = insertionIndex < remainingKills.size() ? insertionIndex : remainingKills.size() - 1;
+			targetSessionId = remainingKills.get(targetIndex).getSessionId();
+		}
+
+		removeKillFromSession(kill);
+
+		Session targetSession = sessions.get(targetSessionId);
+		if (targetSession == null)
+		{
+			targetSession = getCurrentSession().orElse(null);
+		}
+		if (targetSession == null)
+		{
+			invalidateKillsCache();
+			saveToConfig();
+			return;
+		}
+
+		Kill movedKill = kill;
+		if (!targetSession.getId().equals(kill.getSessionId()))
+		{
+			movedKill = copyKillForSession(kill, targetSession.getId());
+		}
+
+		int localTargetIndex = 0;
+		for (int i = 0; i < insertionIndex; i++)
+		{
+			if (targetSession.getId().equals(remainingKills.get(i).getSessionId()))
 			{
-				// We need to find the correct local index in the target session
-				int localTargetIndex = s.getKills().indexOf(targetKill);
-				if (localTargetIndex != -1)
-				{
-					s.getKills().add(localTargetIndex, kill);
-				}
-				else
-				{
-					s.getKills().add(kill);
-				}
-				break;
+				localTargetIndex++;
 			}
 		}
+		targetSession.getKills().add(localTargetIndex, movedKill);
 
 		invalidateKillsCache();
 		saveToConfig();
+	}
+
+	private void removeKillFromSession(Kill kill)
+	{
+		for (Session s : sessions.values())
+		{
+			if (s.getKills().remove(kill))
+			{
+				return;
+			}
+		}
+	}
+
+	private Kill copyKillForSession(Kill kill, String sessionId)
+	{
+		Kill copy = new Kill(sessionId, kill.getPlayer(), kill.getAmount(), kill.getAt());
+		copy.setType(kill.getType());
+		return copy;
 	}
 	private String currentSessionId;
 	@Getter
@@ -258,6 +434,20 @@ public class ManagerSession
 	}
 
 	/**
+	 * Export all completed history threads as JSON.
+	 */
+	public String exportHistorySessionsJson()
+	{
+		Set<String> historyRootIds = getHistorySessionsNewestFirst().stream()
+			.map(Session::getId)
+			.collect(Collectors.toCollection(LinkedHashSet::new));
+		List<Session> historySessions = sessions.values().stream()
+			.filter(session -> historyRootIds.contains(getRootSessionId(session)))
+			.collect(Collectors.toList());
+		return gson.toJson(historySessions);
+	}
+
+	/**
 	 * Export a single session by id as JSON.
 	 *
 	 * @return JSON for the specified session, or empty string when not found
@@ -266,6 +456,30 @@ public class ManagerSession
 	{
 		Session session = sessions.get(sessionId);
 		return session == null ? "" : gson.toJson(session);
+	}
+
+	/**
+	 * Export the selected history thread as JSON, including root and child segments.
+	 *
+	 * @return JSON for the selected session thread, or empty string when not found
+	 */
+	public String exportSessionThreadJson(String sessionId)
+	{
+		Session selected = sessions.get(sessionId);
+		if (selected == null)
+		{
+			return "";
+		}
+		String rootId = getRootSessionId(selected);
+		List<Session> threadSessions = sessions.values().stream()
+			.filter(session -> rootId.equals(getRootSessionId(session)))
+			.collect(Collectors.toList());
+		return gson.toJson(threadSessions);
+	}
+
+	private String getRootSessionId(Session session)
+	{
+		return session.getMotherId() == null ? session.getId() : session.getMotherId();
 	}
 
 	/**
@@ -905,7 +1119,8 @@ public class ManagerSession
 		{
 			return Collections.unmodifiableList(cached);
 		}
-		// Build once, sort by time ascending (oldest first), and cache
+		// Build once in persisted session/list order. The edit-history UI can reorder
+		// kills, so sorting by timestamp here would discard those edits on refresh.
 		List<Kill> built = new ArrayList<>();
 		for (Session session : sessions.values())
 		{
@@ -914,7 +1129,6 @@ public class ManagerSession
 				built.addAll(session.getKills());
 			}
 		}
-		built.sort(Comparator.comparing(Kill::getAt, Comparator.nullsLast(Comparator.naturalOrder())));
 		motherKillsCache.put(motherId, built);
 		return built;
 	}

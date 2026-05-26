@@ -13,6 +13,7 @@ import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.SwingConstants;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
@@ -31,6 +32,8 @@ import net.runelite.client.util.SwingUtil;
  */
 public class DropdownRip extends JPanel
 {
+	private static final Dimension HEADER_CONTROL_SIZE = new Dimension(24, 24);
+
 	private final Header header;
 	private final JPanel contentHolder;
 	private boolean expanded;
@@ -144,12 +147,16 @@ public class DropdownRip extends JPanel
 
 			if (extraComponent != null)
 			{
+				styleHeaderControl(extraComponent);
 				rightPanel.add(extraComponent);
 			}
 
 			JLabel info = new JLabel("\uD83D\uDEC8"); // info symbol
 			info.setToolTipText(tooltip);
 			info.setVisible(tooltip != null && !tooltip.isEmpty());
+			info.setHorizontalAlignment(SwingConstants.CENTER);
+			info.setVerticalAlignment(SwingConstants.CENTER);
+			styleHeaderControl(info);
 			rightPanel.add(info);
 
 			sectionHeader.add(rightPanel, BorderLayout.EAST);
@@ -200,6 +207,12 @@ public class DropdownRip extends JPanel
 			sectionToggle.addActionListener(a -> toggle());
 		}
 
+		private void styleHeaderControl(JComponent component)
+		{
+			component.setPreferredSize(HEADER_CONTROL_SIZE);
+			component.setMinimumSize(HEADER_CONTROL_SIZE);
+			component.setMaximumSize(HEADER_CONTROL_SIZE);
+		}
 
 		private void setExpanded(boolean ex)
 		{

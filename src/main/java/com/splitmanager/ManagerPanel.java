@@ -86,9 +86,9 @@ public class ManagerPanel
 		{
 			popoutFrame.toFront();
 			popoutFrame.requestFocus();
-			if (startInEditMode && popoutView != null)
+			if (popoutView != null)
 			{
-				popoutView.setEditMode(true);
+				popoutView.setEditMode(startInEditMode);
 			}
 			return;
 		}

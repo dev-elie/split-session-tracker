@@ -20,6 +20,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class TableModelsTest
 {
@@ -82,24 +83,29 @@ public class TableModelsTest
 		table.setFromKills(Arrays.asList(loot, joined, left));
 
 		assertEquals(3, table.getRowCount());
-		assertEquals(3, table.getColumnCount());
+		assertEquals(4, table.getColumnCount());
 		assertEquals("Time", table.getColumnName(0));
 		assertEquals("Player", table.getColumnName(1));
 		assertEquals("Amount", table.getColumnName(2));
+		assertEquals("Tax", table.getColumnName(3));
 		assertEquals(String.class, table.getColumnClass(0));
 		assertNotNull(table.getValueAt(0, 0));
 		assertEquals("Cara", table.getValueAt(0, 1));
 		assertEquals("Left", table.getValueAt(0, 2));
+		assertEquals("", table.getValueAt(0, 3));
 		assertEquals("Bob", table.getValueAt(1, 1));
 		assertEquals("Joined", table.getValueAt(1, 2));
+		assertEquals("", table.getValueAt(1, 3));
 		assertEquals("Alice", table.getValueAt(2, 1));
 		assertEquals("150K", table.getValueAt(2, 2));
+		assertEquals("", table.getValueAt(2, 3));
 		assertEquals("", table.getValueAt(2, 99));
 		assertFalse(table.isCellEditable(0, 1));
 		assertFalse(table.isCellEditable(1, 2));
 		assertTrue(table.isCellEditable(2, 1));
 		assertTrue(table.isCellEditable(2, 2));
 		assertFalse(table.isCellEditable(2, 0));
+		assertFalse(table.isCellEditable(2, 3));
 		assertSame(loot, table.getKillAt(2));
 		assertNull(table.getKillAt(-1));
 
@@ -107,6 +113,26 @@ public class TableModelsTest
 		assertEquals(0, table.getRowCount());
 		table.setFromKills(null);
 		assertEquals(0, table.getRowCount());
+	}
+
+	@Test
+	public void testRecentSplitsTableMarksTaxedLootRows()
+	{
+		PluginConfig config = mock(PluginConfig.class);
+		when(config.accountForGeTax()).thenReturn(true);
+		when(config.geTaxMinimumValue()).thenReturn("15m");
+		when(config.geTaxPercent()).thenReturn(2.0d);
+		RecentSplitsTable table = new RecentSplitsTable(config);
+		Kill untaxed = new Kill("session", "Alice", 14000000L, Instant.parse("2024-01-01T00:00:00Z"));
+		Kill taxed = new Kill("session", "Bob", 15000000L, Instant.parse("2024-01-01T00:01:00Z"));
+		Kill joined = new Kill("session", "Cara", 100000000L, Instant.parse("2024-01-01T00:02:00Z"));
+		joined.setType("JOINED");
+
+		table.setFromKills(Arrays.asList(untaxed, taxed, joined));
+
+		assertEquals("", table.getValueAt(0, 3));
+		assertEquals("*", table.getValueAt(1, 3));
+		assertEquals("", table.getValueAt(2, 3));
 	}
 
 	@Test
@@ -129,8 +155,32 @@ public class TableModelsTest
 		table.setValueAt("bad", 0, 2);
 		assertEquals(2000000L, (long) loot.getAmount());
 
+		table.setValueAt(null, 0, 1);
+		assertEquals("Alice Main", loot.getPlayer());
+		table.setValueAt(" ", 0, 1);
+		assertEquals("Alice Main", loot.getPlayer());
+		table.setValueAt("ignored", 0, 99);
+		assertEquals("Alice Main", loot.getPlayer());
+
 		table.setValueAt("ignored", -1, 1);
 		assertEquals("Alice Main", loot.getPlayer());
+	}
+
+	@Test
+	public void testRecentSplitsTableGeTaxMarkerHandlesInvalidConfig()
+	{
+		PluginConfig config = mock(PluginConfig.class);
+		when(config.accountForGeTax()).thenReturn(true);
+		RecentSplitsTable table = new RecentSplitsTable(config);
+		Kill taxed = new Kill("session", "Alice", 15000000L, Instant.parse("2024-01-01T00:00:00Z"));
+		table.setFromKills(Collections.singletonList(taxed));
+
+		when(config.geTaxPercent()).thenReturn(Double.NaN);
+		when(config.geTaxMinimumValue()).thenReturn("not-an-amount");
+		assertEquals("*", table.getValueAt(0, 3));
+
+		when(config.geTaxPercent()).thenReturn(0.0d);
+		assertEquals("", table.getValueAt(0, 3));
 	}
 
 	@Test

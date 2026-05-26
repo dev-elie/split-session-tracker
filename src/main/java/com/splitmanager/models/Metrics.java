@@ -1,29 +1,25 @@
 package com.splitmanager.models;
 
+import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.splitmanager.utils.Formats;
-import java.awt.image.BufferedImage;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 import javax.swing.BorderFactory;
-import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.table.AbstractTableModel;
 import net.runelite.client.ui.ColorScheme;
-import net.runelite.client.util.ImageUtil;
 
 public final class Metrics extends AbstractTableModel
 {
-	private final JButton removeBtn = createStyledButton("/com/splitmanager/icons/trash-solid-full.png");
-	private final JButton addBtn = createStyledButton("/com/splitmanager/icons/trash-arrow-up-solid-full.png");
+	private final JButton removeBtn = createStyledButton("/com/splitmanager/icons/sleep.svg");
+	private final JButton addBtn = createStyledButton("/com/splitmanager/icons/sunrise.svg");
 	private List<PlayerMetrics> rows = List.of();
 	private boolean hideTotalColumn = false;
 
 	private static JButton createStyledButton(String iconPath)
 	{
-		BufferedImage img = ImageUtil.loadImageResource(Metrics.class, iconPath);
-		BufferedImage scaledImg = ImageUtil.resizeImage(img, 16, 16);
-		JButton btn = new JButton(new ImageIcon(scaledImg));
+		JButton btn = new JButton(new FlatSVGIcon(Metrics.class.getResource(iconPath)).derive(16, 16));
 		btn.setBorder(BorderFactory.createLineBorder(ColorScheme.DARK_GRAY_COLOR));
 		return btn;
 	}

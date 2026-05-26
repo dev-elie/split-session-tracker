@@ -107,6 +107,31 @@ public class SplitCalculatorTest
 		assertEquals(207000000L, (long) b.split);
 	}
 
+	@Test
+	public void doesNotApplyGeTaxToRosterEvents()
+	{
+		Session mother = new Session("mother", Instant.EPOCH, null);
+		Session current = new Session("current", Instant.EPOCH.plusSeconds(1), "mother");
+		current.getPlayers().addAll(Arrays.asList("A", "B"));
+
+		Kill joined = new Kill("current", "A", 100000000L, Instant.EPOCH.plusSeconds(2));
+		joined.setType(Kill.TYPE_JOINED);
+		current.getKills().add(joined);
+
+		List<PlayerMetrics> metrics = new SplitCalculator().compute(
+			current,
+			Arrays.asList(mother, current),
+			new LinkedHashSet<>(current.getPlayers()),
+			true,
+			new SplitCalculator.GeTaxSettings(true, 15000000L, 2.0d, 5000000L));
+
+		assertEquals(2, metrics.size());
+		assertEquals(0L, (long) find(metrics, "A").total);
+		assertEquals(0L, (long) find(metrics, "A").split);
+		assertEquals(0L, (long) find(metrics, "B").total);
+		assertEquals(0L, (long) find(metrics, "B").split);
+	}
+
 	private PlayerMetrics find(List<PlayerMetrics> metrics, String player)
 	{
 		return metrics.stream().filter(m -> player.equals(m.player)).findFirst().get();

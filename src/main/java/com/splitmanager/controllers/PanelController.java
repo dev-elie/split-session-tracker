@@ -12,6 +12,7 @@ import com.splitmanager.utils.Formats;
 import com.splitmanager.utils.MarkdownFormatter;
 import static com.splitmanager.utils.Utils.toast;
 import com.splitmanager.views.PanelView;
+import java.awt.Color;
 import java.awt.Toolkit;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
@@ -53,8 +54,7 @@ public class PanelController implements PanelActions
 	{
 		if (sessionManager.isHistoryLoaded())
 		{
-			toast(view, "Unload history first.");
-			return;
+			sessionManager.unloadHistory();
 		}
 		if (sessionManager.hasActiveSession())
 		{
@@ -71,7 +71,10 @@ public class PanelController implements PanelActions
 	{
 		if (sessionManager.isHistoryLoaded())
 		{
-			toast(view, "Cannot stop while history loaded.");
+			sessionManager.unloadHistory();
+			toast(view, "History closed.");
+			managerPanel.refreshAllView();
+			refreshAllView();
 			return;
 		}
 		int res = JOptionPane.showConfirmDialog(view,
@@ -401,6 +404,50 @@ public class PanelController implements PanelActions
 	}
 
 	@Override
+	public void exportHistory(String selectedSessionId)
+	{
+		if (sessionManager.getHistorySessionsNewestFirst().isEmpty())
+		{
+			toast(view, "No history to export.");
+			return;
+		}
+
+		Object[] options = {"All history", "Selected session", "Cancel"};
+		int choice = JOptionPane.showOptionDialog(view,
+			"Export all history or the currently selected session?",
+			"Export history",
+			JOptionPane.DEFAULT_OPTION,
+			JOptionPane.QUESTION_MESSAGE,
+			null,
+			options,
+			options[0]);
+
+		if (choice == 0)
+		{
+			copyToClipboard(sessionManager.exportHistorySessionsJson());
+			toast(view, "All history JSON copied.");
+			return;
+		}
+
+		if (choice == 1)
+		{
+			if (selectedSessionId == null || selectedSessionId.isBlank())
+			{
+				toast(view, "Select a session from history.");
+				return;
+			}
+			String payload = sessionManager.exportSessionThreadJson(selectedSessionId);
+			if (payload.isEmpty())
+			{
+				toast(view, "Failed to export selected history.");
+				return;
+			}
+			copyToClipboard(payload);
+			toast(view, "Selected history JSON copied.");
+		}
+	}
+
+	@Override
 	public void onKnownPlayerSelectionChanged(String selected)
 	{
 		refreshAlts();
@@ -465,8 +512,7 @@ public class PanelController implements PanelActions
 	public void copyMetricsJson()
 	{
 		String payload = MarkdownFormatter.buildMetricsJson(sessionManager);
-		StringSelection selection = new StringSelection(payload);
-		Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+		copyToClipboard(payload);
 	}
 
 	@Override
@@ -475,6 +521,11 @@ public class PanelController implements PanelActions
 		String payload = MarkdownFormatter.buildMetricsMarkdown(
 			sessionManager.computeMetricsFor(
 				sessionManager.getCurrentSession().orElse(null), true), config);
+		copyToClipboard(payload);
+	}
+
+	private void copyToClipboard(String payload)
+	{
 		StringSelection selection = new StringSelection(payload);
 		Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
 	}
@@ -578,7 +629,24 @@ public class PanelController implements PanelActions
 			view.getCurrentSessionPlayerDropdown().setEnabled(false);
 		}
 
-		view.getHistoryLabel().setText("History: " + (sessionManager.isHistoryLoaded() ? "ON" : "OFF"));
+		if (sessionManager.isHistoryLoaded())
+		{
+			view.getHistoryLabel().setText("HISTORY LOADED - read only");
+			view.getHistoryLabel().setOpaque(true);
+			view.getHistoryLabel().setBackground(new Color(132, 84, 0));
+			view.getHistoryLabel().setForeground(Color.WHITE);
+			view.getHistoryLabel().setBorder(javax.swing.BorderFactory.createEmptyBorder(4, 6, 4, 6));
+			view.getHistoryLabel().setToolTipText("Start closes history and starts a new session. Stop closes history.");
+		}
+		else
+		{
+			view.getHistoryLabel().setText("History: OFF");
+			view.getHistoryLabel().setOpaque(false);
+			view.getHistoryLabel().setBackground(null);
+			view.getHistoryLabel().setForeground(null);
+			view.getHistoryLabel().setBorder(null);
+			view.getHistoryLabel().setToolTipText(null);
+		}
 
 		Session current = sessionManager.getCurrentSession().orElse(null);
 		if (current != null)
@@ -631,8 +699,8 @@ public class PanelController implements PanelActions
 		boolean readOnly = sessionManager.isHistoryLoaded();
 		boolean hasActiveSession = sessionManager.hasActiveSession();
 
-		view.getBtnStart().setEnabled(!readOnly && !hasActiveSession);
-		view.getBtnStop().setEnabled(!readOnly && hasActiveSession);
+		view.getBtnStart().setEnabled(readOnly || !hasActiveSession);
+		view.getBtnStop().setEnabled(readOnly || hasActiveSession);
 		view.getBtnAddToSession().setEnabled(!readOnly && hasActiveSession);
 		view.getNotInCurrentSessionPlayerDropdown().setEnabled(!readOnly && hasActiveSession);
 		view.getBtnRemoveFromSession().setEnabled(!readOnly && hasActiveSession);
@@ -652,6 +720,7 @@ public class PanelController implements PanelActions
 		view.getHistorySessionDropdown().setEnabled(!hasActiveSession && hasHistory);
 		view.getBtnViewHistory().setEnabled(!hasActiveSession && hasHistory);
 		view.getBtnUnloadHistory().setEnabled(readOnly);
+		view.getBtnExportHistory().setEnabled(hasHistory);
 		view.getRecentSplitsTable().setEnabled(!readOnly);
 	}
 

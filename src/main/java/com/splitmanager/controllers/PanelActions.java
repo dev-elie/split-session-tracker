@@ -92,6 +92,13 @@ public interface PanelActions
 	void unloadHistory();
 
 	/**
+	 * Export history JSON for all history or the selected history session.
+	 *
+	 * @param selectedSessionId selected history session id
+	 */
+	void exportHistory(String selectedSessionId);
+
+	/**
 	 * Handle selection change in known-players list.
 	 *
 	 * @param selected currently selected name

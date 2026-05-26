@@ -38,6 +38,12 @@ public interface PluginConfig extends Config
 		position = 3
 	)
 	String settlementSection = "Settlement";
+	@ConfigSection(
+		name = "GE tax",
+		description = "Grand Exchange tax settings",
+		position = 4
+	)
+	String geTaxSection = "GE tax";
 	// Chat detection settings
 	@ConfigSection(
 		name = "Chat detection",
@@ -253,7 +259,7 @@ public interface PluginConfig extends Config
 		keyName = "accountForGeTax",
 		name = "Account for GE tax",
 		description = "Adjust split balances so the seller bears GE tax on eligible loot",
-		section = settlementSection,
+		section = geTaxSection,
 		position = 1
 	)
 	default boolean accountForGeTax()
@@ -265,7 +271,7 @@ public interface PluginConfig extends Config
 		keyName = "geTaxMinimumValue",
 		name = "GE tax minimum value",
 		description = "Only apply GE tax to loot at or above this OSRS amount, for example 15m",
-		section = settlementSection,
+		section = geTaxSection,
 		position = 2
 	)
 	default String geTaxMinimumValue()
@@ -277,7 +283,7 @@ public interface PluginConfig extends Config
 		keyName = "geTaxPercent",
 		name = "GE tax percent",
 		description = "Percent applied to each eligible loot value before the 5m per-item cap",
-		section = settlementSection,
+		section = geTaxSection,
 		position = 3
 	)
 	default double geTaxPercent()

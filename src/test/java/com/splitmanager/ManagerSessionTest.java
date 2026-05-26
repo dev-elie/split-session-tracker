@@ -83,6 +83,33 @@ public class ManagerSessionTest
 	}
 
 	@Test
+	public void testExportSelectedHistoryIncludesRootAndChildren()
+	{
+		managerSession.startSession();
+		managerSession.stopSession();
+		Session root = managerSession.getHistorySessionsNewestFirst().get(0);
+
+		Session[] exported = gson.fromJson(managerSession.exportSessionThreadJson(root.getId()), Session[].class);
+
+		assertEquals(2, exported.length);
+		assertEquals(1, Arrays.stream(exported).filter(session -> session.getMotherId() == null).count());
+		assertEquals(1, Arrays.stream(exported).filter(session -> root.getId().equals(session.getMotherId())).count());
+	}
+
+	@Test
+	public void testExportAllHistoryExcludesActiveSession()
+	{
+		managerSession.startSession();
+		managerSession.stopSession();
+		managerSession.startSession();
+
+		Session[] exported = gson.fromJson(managerSession.exportHistorySessionsJson(), Session[].class);
+
+		assertEquals(2, exported.length);
+		assertTrue(Arrays.stream(exported).noneMatch(Session::isActive));
+	}
+
+	@Test
 	public void testAddPlayerToActive()
 	{
 		managerSession.startSession();
@@ -193,6 +220,68 @@ public class ManagerSessionTest
 		assertEquals(100000000L, (long) m1.total);
 		assertEquals(-52000000L, (long) m1.split);
 		assertEquals(0L, (long) m2.total);
+		assertEquals(50000000L, (long) m2.split);
+	}
+
+	@Test
+	public void testComputeMetricsFallsBackForInvalidGeTaxMinimum()
+	{
+		managerSession.startSession();
+
+		String p1 = "Player1";
+		String p2 = "Player2";
+		when(playerManager.getMainName(p1)).thenReturn(p1);
+		when(playerManager.getMainName(p2)).thenReturn(p2);
+		when(playerManager.getKnownPlayers()).thenReturn(new HashSet<>());
+		when(config.accountForGeTax()).thenReturn(true);
+		when(config.geTaxMinimumValue()).thenReturn("not-an-amount");
+		when(config.geTaxPercent()).thenReturn(2.0d);
+
+		managerSession.addPlayerToActive(p1);
+		managerSession.addPlayerToActive(p2);
+		Session child = managerSession.getCurrentSession().get();
+
+		PendingValue pv = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 100m", 100000000L, p1);
+		managerSession.addPendingValue(pv);
+		managerSession.applyPendingValueToPlayer(pv.getId(), p1);
+
+		List<PlayerMetrics> metrics = managerSession.computeMetricsFor(child);
+		PlayerMetrics m1 = metrics.stream().filter(m -> m.player.equals(p1)).findFirst().get();
+		PlayerMetrics m2 = metrics.stream().filter(m -> m.player.equals(p2)).findFirst().get();
+
+		assertEquals(100000000L, (long) m1.total);
+		assertEquals(-52000000L, (long) m1.split);
+		assertEquals(50000000L, (long) m2.split);
+	}
+
+	@Test
+	public void testComputeMetricsFallsBackForInvalidGeTaxPercent()
+	{
+		managerSession.startSession();
+
+		String p1 = "Player1";
+		String p2 = "Player2";
+		when(playerManager.getMainName(p1)).thenReturn(p1);
+		when(playerManager.getMainName(p2)).thenReturn(p2);
+		when(playerManager.getKnownPlayers()).thenReturn(new HashSet<>());
+		when(config.accountForGeTax()).thenReturn(true);
+		when(config.geTaxMinimumValue()).thenReturn("15m");
+		when(config.geTaxPercent()).thenReturn(-1.0d);
+
+		managerSession.addPlayerToActive(p1);
+		managerSession.addPlayerToActive(p2);
+		Session child = managerSession.getCurrentSession().get();
+
+		PendingValue pv = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 100m", 100000000L, p1);
+		managerSession.addPendingValue(pv);
+		managerSession.applyPendingValueToPlayer(pv.getId(), p1);
+
+		List<PlayerMetrics> metrics = managerSession.computeMetricsFor(child);
+		PlayerMetrics m1 = metrics.stream().filter(m -> m.player.equals(p1)).findFirst().get();
+		PlayerMetrics m2 = metrics.stream().filter(m -> m.player.equals(p2)).findFirst().get();
+
+		assertEquals(100000000L, (long) m1.total);
+		assertEquals(-52000000L, (long) m1.split);
 		assertEquals(50000000L, (long) m2.split);
 	}
 
@@ -503,6 +592,81 @@ public class ManagerSessionTest
 		reloaded.loadFromConfig();
 
 		assertEquals(cached.size(), reloaded.getAllKills().size());
+	}
+
+	@Test
+	public void testMoveKillReordersWithinSessionAndAllowsDropAfterLastRow()
+	{
+		managerSession.startSession();
+		String p1 = "Player1";
+		resolveToSelf(p1);
+		managerSession.addPlayerToActive(p1);
+		managerSession.addKill(p1, 100000L);
+		managerSession.addKill(p1, 200000L);
+
+		managerSession.moveKill(1, 3);
+
+		List<Kill> kills = managerSession.getAllKills();
+		assertEquals(0L, kills.get(0).getAmount().longValue());
+		assertEquals(200000L, kills.get(1).getAmount().longValue());
+		assertEquals(100000L, kills.get(2).getAmount().longValue());
+	}
+
+	@Test
+	public void testMoveKillAcrossSessionSegmentsUsesTargetSegment()
+	{
+		managerSession.startSession();
+		String p1 = "Player1";
+		String p2 = "Player2";
+		resolveToSelf(p1, p2);
+		managerSession.addPlayerToActive(p1);
+		managerSession.addKill(p1, 100000L);
+		managerSession.addPlayerToActive(p2);
+		managerSession.addKill(p2, 200000L);
+
+		managerSession.moveKill(1, 4);
+
+		List<Kill> kills = managerSession.getAllKills();
+		assertEquals(4, kills.size());
+		assertEquals(0L, kills.get(0).getAmount().longValue());
+		assertEquals(0L, kills.get(1).getAmount().longValue());
+		assertEquals(200000L, kills.get(2).getAmount().longValue());
+		assertEquals(100000L, kills.get(3).getAmount().longValue());
+		assertEquals(kills.get(2).getSessionId(), kills.get(3).getSessionId());
+	}
+
+	@Test
+	public void testRemoveLeftRosterEventReactivatesPlayerForSettlement()
+	{
+		managerSession.startSession();
+		String p1 = "Player1";
+		String p2 = "Player2";
+		resolveToSelf(p1, p2);
+		when(playerManager.getKnownPlayers()).thenReturn(new LinkedHashSet<>(Arrays.asList(p1, p2)));
+
+		managerSession.addPlayerToActive(p1);
+		managerSession.addPlayerToActive(p2);
+		managerSession.addKill(p1, 100000L);
+		assertTrue(managerSession.removePlayerFromSession(p2));
+		assertFalse(managerSession.getCurrentSession().get().getPlayers().contains(p2));
+
+		List<Kill> kills = managerSession.getAllKills();
+		int leftIndex = -1;
+		for (int i = 0; i < kills.size(); i++)
+		{
+			if (Kill.TYPE_LEFT.equals(kills.get(i).getType()) && p2.equals(kills.get(i).getPlayer()))
+			{
+				leftIndex = i;
+				break;
+			}
+		}
+		assertTrue(leftIndex >= 0);
+
+		managerSession.removeKillAt(leftIndex);
+
+		assertTrue(managerSession.getCurrentSession().get().getPlayers().contains(p2));
+		List<PlayerMetrics> metrics = managerSession.computeMetricsFor(managerSession.getCurrentSession().get(), true);
+		assertTrue(metrics.stream().anyMatch(m -> p2.equals(m.player) && m.activePlayer));
 	}
 
 	@Test
