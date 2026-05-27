@@ -10,6 +10,7 @@ import com.splitmanager.models.Metrics;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.RecentSplitsTable;
 import com.splitmanager.models.Session;
+import com.splitmanager.models.SettlementConfigSnapshot;
 import com.splitmanager.models.Transfer;
 import com.splitmanager.models.WaitlistTable;
 import com.splitmanager.utils.Formats;
@@ -51,6 +52,7 @@ import javax.swing.DefaultCellEditor;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.Icon;
@@ -113,6 +115,14 @@ public class PanelView extends PluginPanel
 	private final JButton btnAddKill = new JButton("Add");
 	private final JButton btnStart = new JButton("Start");
 	private final JButton btnStop = new JButton("Stop");
+	private final JPanel historyContextPanel = new JPanel(new GridBagLayout());
+	private final JCheckBox historyGeTaxEnabled = new JCheckBox("Account for GE tax");
+	private final JTextField historyGeTaxMinimumValue = new JTextField();
+	private final JTextField historyGeTaxPercent = new JTextField();
+	private final JTextField historyGeTaxMaxPerLoot = new JTextField();
+	private final JButton btnSaveHistoryContext = new JButton("Save");
+	private final JButton btnApplyHistoryContext = new JButton("Apply view");
+	private final JButton btnCancelHistoryContext = new JButton("Cancel");
 	private final JComboBox<HistorySessionItem> historySessionDropdown = new JComboBox<>();
 	private final JButton btnViewHistory = new JButton("View");
 	private final JButton btnUnloadHistory = new JButton("Close");
@@ -244,6 +254,8 @@ public class PanelView extends PluginPanel
 
 		top.add(generateSessionPanel());
 		top.add(Box.createVerticalStrut(3));
+		top.add(generateHistoryContextPanel());
+		top.add(Box.createVerticalStrut(3));
 		top.add(generateSessionPlayerManagement());
 		top.add(Box.createVerticalStrut(3));
 		top.add(generateAddSplit());
@@ -350,6 +362,11 @@ public class PanelView extends PluginPanel
 		btnUnloadHistory.addActionListener(e -> actions.unloadHistory());
 		btnExportHistory.addActionListener(e -> actions.exportHistory(getSelectedHistorySessionId()));
 		btnImportHistory.addActionListener(e -> actions.importHistoryFromClipboard());
+		btnSaveHistoryContext.addActionListener(e ->
+			actions.saveHistorySettlementContext(getHistoryContextSnapshotFromInputs()));
+		btnApplyHistoryContext.addActionListener(e ->
+			actions.applyHistorySettlementContext(getHistoryContextSnapshotFromInputs()));
+		btnCancelHistoryContext.addActionListener(e -> actions.cancelHistorySettlementContextEdit());
 		waitlistTable.addMouseListener(new java.awt.event.MouseAdapter()
 		{
 			@Override
@@ -876,6 +893,94 @@ public class PanelView extends PluginPanel
 		return sessionPanel;
 	}
 
+	private JPanel generateHistoryContextPanel()
+	{
+		historyContextPanel.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createTitledBorder("History context"),
+			BorderFactory.createEmptyBorder(3, 3, 3, 3)));
+
+		GridBagConstraints gbc = new GridBagConstraints();
+		gbc.insets = new Insets(2, 3, 2, 3);
+		gbc.fill = GridBagConstraints.HORIZONTAL;
+		gbc.weightx = 1.0;
+		gbc.gridx = 0;
+		gbc.gridy = 0;
+		gbc.gridwidth = 2;
+		historyContextPanel.add(historyGeTaxEnabled, gbc);
+
+		gbc.gridwidth = 1;
+		gbc.gridy++;
+		addHistoryContextRow("Min", historyGeTaxMinimumValue, gbc);
+		gbc.gridy++;
+		addHistoryContextRow("Percent", historyGeTaxPercent, gbc);
+		gbc.gridy++;
+		addHistoryContextRow("Cap", historyGeTaxMaxPerLoot, gbc);
+
+		JPanel buttons = new JPanel(new GridLayout(1, 2, 6, 0));
+		buttons.add(btnCancelHistoryContext);
+		buttons.add(btnApplyHistoryContext);
+		gbc.gridx = 0;
+		gbc.gridy++;
+		gbc.gridwidth = 2;
+		historyContextPanel.add(buttons, gbc);
+
+		gbc.gridy++;
+		historyContextPanel.add(btnSaveHistoryContext, gbc);
+
+		historyContextPanel.setVisible(false);
+		return historyContextPanel;
+	}
+
+	private void addHistoryContextRow(String label, JTextField field, GridBagConstraints gbc)
+	{
+		gbc.gridx = 0;
+		gbc.weightx = 0.0;
+		historyContextPanel.add(new JLabel(label), gbc);
+		gbc.gridx = 1;
+		gbc.weightx = 1.0;
+		historyContextPanel.add(field, gbc);
+	}
+
+	public void setHistoryContextVisible(boolean visible)
+	{
+		historyContextPanel.setVisible(visible);
+		historyContextPanel.revalidate();
+		historyContextPanel.repaint();
+	}
+
+	public void setHistoryContextSnapshot(SettlementConfigSnapshot snapshot)
+	{
+		if (snapshot == null)
+		{
+			snapshot = new SettlementConfigSnapshot(false,
+				PluginConfig.DEFAULT_GE_TAX_MINIMUM_VALUE,
+				PluginConfig.DEFAULT_GE_TAX_PERCENT,
+				PluginConfig.DEFAULT_GE_TAX_MAX_PER_LOOT_VALUE);
+		}
+		historyGeTaxEnabled.setSelected(snapshot.isAccountForGeTax());
+		historyGeTaxMinimumValue.setText(snapshot.getGeTaxMinimumValue());
+		historyGeTaxPercent.setText(Double.toString(snapshot.getGeTaxPercent()));
+		historyGeTaxMaxPerLoot.setText(snapshot.getGeTaxMaxPerLoot());
+	}
+
+	private SettlementConfigSnapshot getHistoryContextSnapshotFromInputs()
+	{
+		double percent;
+		try
+		{
+			percent = Double.parseDouble(historyGeTaxPercent.getText().trim());
+		}
+		catch (NumberFormatException e)
+		{
+			percent = Double.NaN;
+		}
+		return new SettlementConfigSnapshot(
+			historyGeTaxEnabled.isSelected(),
+			historyGeTaxMinimumValue.getText().trim(),
+			percent,
+			historyGeTaxMaxPerLoot.getText().trim());
+	}
+
 	private JPanel generateWaitlistPanel()
 	{
 		JPanel p = new JPanel();
@@ -1074,7 +1179,7 @@ public class PanelView extends PluginPanel
 		return new DropdownRip("Settlement information", wrapper, true, null, extraButtons);
 	}
 
-	private void refreshMetricsContent()
+	public void refreshMetricsContent()
 	{
 		metricsContentWrapper.removeAll();
 

@@ -1,5 +1,7 @@
 package com.splitmanager.controllers;
 
+import com.splitmanager.models.SettlementConfigSnapshot;
+
 /**
  * Actions that the PanelView can invoke on its controller.
  */
@@ -102,6 +104,25 @@ public interface PanelActions
 	 * Import history JSON from the clipboard.
 	 */
 	void importHistoryFromClipboard();
+
+	/**
+	 * Save edited settlement context for the currently loaded history session.
+	 *
+	 * @param snapshot edited settlement-affecting config
+	 */
+	void saveHistorySettlementContext(SettlementConfigSnapshot snapshot);
+
+	/**
+	 * Recompute the loaded history view with edited settlement context without saving it.
+	 *
+	 * @param snapshot edited settlement-affecting config
+	 */
+	void applyHistorySettlementContext(SettlementConfigSnapshot snapshot);
+
+	/**
+	 * Discard edits and reload the currently loaded history settlement context.
+	 */
+	void cancelHistorySettlementContextEdit();
 
 	/**
 	 * Handle selection change in known-players list.

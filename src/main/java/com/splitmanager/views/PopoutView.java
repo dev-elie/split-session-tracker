@@ -384,6 +384,10 @@ public class PopoutView extends PanelView
 		@Override
 		public void setValueAt(Object aValue, int rowIndex, int columnIndex)
 		{
+			if (!sessionManager.prepareHistoryMutation())
+			{
+				return;
+			}
 			Kill k = kills.get(rowIndex);
 			if (columnIndex == 1)
 			{
@@ -397,7 +401,7 @@ public class PopoutView extends PanelView
 				}
 				catch (NumberFormatException ignored) {}
 			}
-			sessionManager.saveToConfig();
+			sessionManager.markHistoryMutation();
 			controller.refreshAllView();
 			fireTableCellUpdated(rowIndex, columnIndex);
 		}
@@ -784,7 +788,11 @@ public class PopoutView extends PanelView
 
 				if (fromIndex != toIndex)
 				{
-					sessionManager.moveKill(fromIndex, toIndex);
+					if (!sessionManager.moveKill(fromIndex, toIndex))
+					{
+						toast(PopoutView.this, "Cannot move a left event before that player joined.");
+						return false;
+					}
 					model.refresh();
 					controller.refreshAllView();
 				}

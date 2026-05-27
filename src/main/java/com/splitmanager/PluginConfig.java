@@ -28,7 +28,8 @@ public interface PluginConfig extends Config
 	String DEFAULT_ADD_VALUE_SEPARATOR_REGEX = "\\s*,\\s+|\\s+";
 	String DEFAULT_CHAT_LEAVE_OR_KICK_REGEX = "(?i)^\\s*(?:you\\s+(?:have\\s+)?left\\s+(?:the\\s+)?(?:chat-)?channel\\.?|you\\s+(?:are|aren't|are\\s+not)\\s+currently\\s+in\\s+(?:a|the|your)\\s+(?:chat-)?channel\\.?|you\\s+have\\s+been\\s+kicked\\s+from\\s+the\\s+channel\\.?)\\s*$";
 	String DEFAULT_CHAT_JOIN_REGEX = "(?i)^\\s*now\\s+talking\\s+in\\s+(?:the\\s+)?(?:chat-)?channel\\.?\\s*$";
-	String DEFAULT_GE_TAX_MINIMUM_VALUE = "15m";
+	String DEFAULT_GE_TAX_MINIMUM_VALUE = "8,75m";
+	String DEFAULT_GE_TAX_MAX_PER_LOOT_VALUE = "5m";
 	double DEFAULT_GE_TAX_PERCENT = 2.0d;
 	long DEFAULT_GE_TAX_MAX_PER_LOOT = 5_000_000L;
 	//TODO Create a new configitem that allows the user to submit any forms on enter, e.g. 1) user fills in split amount 2) presses enter 3) The same function as button press is called
@@ -282,13 +283,25 @@ public interface PluginConfig extends Config
 	@ConfigItem(
 		keyName = "geTaxPercent",
 		name = "GE tax percent",
-		description = "Percent applied to each eligible loot value before the 5m per-item cap",
+		description = "Percent applied to each eligible loot value before the configured per-loot cap",
 		section = geTaxSection,
 		position = 3
 	)
 	default double geTaxPercent()
 	{
 		return DEFAULT_GE_TAX_PERCENT;
+	}
+
+	@ConfigItem(
+		keyName = "geTaxMaxPerLoot",
+		name = "GE tax max per loot",
+		description = "Maximum GE tax deducted from one recorded loot value, for example 5m",
+		section = geTaxSection,
+		position = 4
+	)
+	default String geTaxMaxPerLoot()
+	{
+		return DEFAULT_GE_TAX_MAX_PER_LOOT_VALUE;
 	}
 
 	@ConfigItem(

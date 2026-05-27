@@ -24,6 +24,7 @@ import org.junit.runner.RunWith;
 import static org.mockito.ArgumentMatchers.anyString;
 import org.mockito.Mock;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.MockitoJUnitRunner;
@@ -276,10 +277,10 @@ public class ManagerSessionTest
 		PlayerMetrics m1 = metrics.stream().filter(m -> m.player.equals(p1)).findFirst().get();
 		PlayerMetrics m2 = metrics.stream().filter(m -> m.player.equals(p2)).findFirst().get();
 
-		assertEquals(100000000L, (long) m1.total);
-		assertEquals(-52000000L, (long) m1.split);
+		assertEquals(98000000L, (long) m1.total);
+		assertEquals(-49000000L, (long) m1.split);
 		assertEquals(0L, (long) m2.total);
-		assertEquals(50000000L, (long) m2.split);
+		assertEquals(49000000L, (long) m2.split);
 	}
 
 	@Test
@@ -295,12 +296,13 @@ public class ManagerSessionTest
 		when(config.accountForGeTax()).thenReturn(true);
 		when(config.geTaxMinimumValue()).thenReturn("not-an-amount");
 		when(config.geTaxPercent()).thenReturn(2.0d);
+		when(config.geTaxMaxPerLoot()).thenReturn("5m");
 
 		managerSession.addPlayerToActive(p1);
 		managerSession.addPlayerToActive(p2);
 		Session child = managerSession.getCurrentSession().get();
 
-		PendingValue pv = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 100m", 100000000L, p1);
+		PendingValue pv = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 1b", 1000000000L, p1);
 		managerSession.addPendingValue(pv);
 		managerSession.applyPendingValueToPlayer(pv.getId(), p1);
 
@@ -308,9 +310,9 @@ public class ManagerSessionTest
 		PlayerMetrics m1 = metrics.stream().filter(m -> m.player.equals(p1)).findFirst().get();
 		PlayerMetrics m2 = metrics.stream().filter(m -> m.player.equals(p2)).findFirst().get();
 
-		assertEquals(100000000L, (long) m1.total);
-		assertEquals(-52000000L, (long) m1.split);
-		assertEquals(50000000L, (long) m2.split);
+		assertEquals(995000000L, (long) m1.total);
+		assertEquals(-497500000L, (long) m1.split);
+		assertEquals(497500000L, (long) m2.split);
 	}
 
 	@Test
@@ -326,6 +328,7 @@ public class ManagerSessionTest
 		when(config.accountForGeTax()).thenReturn(true);
 		when(config.geTaxMinimumValue()).thenReturn("15m");
 		when(config.geTaxPercent()).thenReturn(-1.0d);
+		when(config.geTaxMaxPerLoot()).thenReturn("5m");
 
 		managerSession.addPlayerToActive(p1);
 		managerSession.addPlayerToActive(p2);
@@ -339,9 +342,186 @@ public class ManagerSessionTest
 		PlayerMetrics m1 = metrics.stream().filter(m -> m.player.equals(p1)).findFirst().get();
 		PlayerMetrics m2 = metrics.stream().filter(m -> m.player.equals(p2)).findFirst().get();
 
-		assertEquals(100000000L, (long) m1.total);
-		assertEquals(-52000000L, (long) m1.split);
-		assertEquals(50000000L, (long) m2.split);
+		assertEquals(98000000L, (long) m1.total);
+		assertEquals(-49000000L, (long) m1.split);
+		assertEquals(49000000L, (long) m2.split);
+	}
+
+	@Test
+	public void testComputeMetricsUsesConfiguredGeTaxCap()
+	{
+		managerSession.startSession();
+
+		String p1 = "Player1";
+		String p2 = "Player2";
+		when(playerManager.getMainName(p1)).thenReturn(p1);
+		when(playerManager.getMainName(p2)).thenReturn(p2);
+		when(playerManager.getKnownPlayers()).thenReturn(new HashSet<>());
+		when(config.accountForGeTax()).thenReturn(true);
+		when(config.geTaxMinimumValue()).thenReturn("15m");
+		when(config.geTaxPercent()).thenReturn(2.0d);
+		when(config.geTaxMaxPerLoot()).thenReturn("10m");
+
+		managerSession.addPlayerToActive(p1);
+		managerSession.addPlayerToActive(p2);
+		Session child = managerSession.getCurrentSession().get();
+
+		PendingValue pv = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 1b", 1000000000L, p1);
+		managerSession.addPendingValue(pv);
+		managerSession.applyPendingValueToPlayer(pv.getId(), p1);
+
+		List<PlayerMetrics> metrics = managerSession.computeMetricsFor(child);
+		PlayerMetrics m1 = metrics.stream().filter(m -> m.player.equals(p1)).findFirst().get();
+		PlayerMetrics m2 = metrics.stream().filter(m -> m.player.equals(p2)).findFirst().get();
+
+		assertEquals(990000000L, (long) m1.total);
+		assertEquals(-495000000L, (long) m1.split);
+		assertEquals(495000000L, (long) m2.split);
+	}
+
+	@Test
+	public void testClosedHistoryUsesSavedSettlementConfigContext()
+	{
+		when(config.accountForGeTax()).thenReturn(true);
+		when(config.geTaxMinimumValue()).thenReturn("15m");
+		when(config.geTaxPercent()).thenReturn(2.0d);
+		when(config.geTaxMaxPerLoot()).thenReturn("5m");
+		resolveToSelf("Player1", "Player2");
+
+		managerSession.startSession();
+		managerSession.addPlayerToActive("Player1");
+		managerSession.addPlayerToActive("Player2");
+		PendingValue pv = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 100m", 100000000L, "Player1");
+		managerSession.addPendingValue(pv);
+		managerSession.applyPendingValueToPlayer(pv.getId(), "Player1");
+		managerSession.stopSession();
+
+		Session historyRoot = managerSession.getHistorySessionsNewestFirst().get(0);
+		assertNotNull(historyRoot.getSettlementConfigAtStart());
+		assertNotNull(historyRoot.getSettlementConfigAtEnd());
+		assertEquals(2.0d, historyRoot.getSettlementConfigAtEnd().getGeTaxPercent(), 0.0d);
+
+		lenient().when(config.geTaxPercent()).thenReturn(10.0d);
+		lenient().when(config.geTaxMaxPerLoot()).thenReturn("10m");
+
+		List<PlayerMetrics> metrics = managerSession.computeMetricsFor(historyRoot, true);
+		PlayerMetrics m1 = metrics.stream().filter(m -> m.player.equals("Player1")).findFirst().get();
+		PlayerMetrics m2 = metrics.stream().filter(m -> m.player.equals("Player2")).findFirst().get();
+
+		assertEquals(98000000L, (long) m1.total);
+		assertEquals(-49000000L, (long) m1.split);
+		assertEquals(49000000L, (long) m2.split);
+	}
+
+	@Test
+	public void testUpdatingSavedHistorySettlementContextChangesHistoryMetrics()
+	{
+		when(config.accountForGeTax()).thenReturn(true);
+		when(config.geTaxMinimumValue()).thenReturn("15m");
+		when(config.geTaxPercent()).thenReturn(2.0d);
+		when(config.geTaxMaxPerLoot()).thenReturn("5m");
+		resolveToSelf("Player1", "Player2");
+
+		managerSession.startSession();
+		managerSession.addPlayerToActive("Player1");
+		managerSession.addPlayerToActive("Player2");
+		PendingValue pv = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 100m", 100000000L, "Player1");
+		managerSession.addPendingValue(pv);
+		managerSession.applyPendingValueToPlayer(pv.getId(), "Player1");
+		managerSession.stopSession();
+
+		Session historyRoot = managerSession.getHistorySessionsNewestFirst().get(0);
+		assertTrue(managerSession.updateSettlementConfigSnapshotFor(
+			historyRoot,
+			new com.splitmanager.models.SettlementConfigSnapshot(true, "15m", 10.0d, "10m")));
+
+		List<PlayerMetrics> metrics = managerSession.computeMetricsFor(historyRoot, true);
+		PlayerMetrics m1 = metrics.stream().filter(m -> m.player.equals("Player1")).findFirst().get();
+		PlayerMetrics m2 = metrics.stream().filter(m -> m.player.equals("Player2")).findFirst().get();
+
+		assertEquals(90000000L, (long) m1.total);
+		assertEquals(-45000000L, (long) m1.split);
+		assertEquals(45000000L, (long) m2.split);
+	}
+
+	@Test
+	public void testHistoryEditWarningCanBlockStagedHistoryChange()
+	{
+		when(config.accountForGeTax()).thenReturn(true);
+		when(config.geTaxMinimumValue()).thenReturn("15m");
+		when(config.geTaxPercent()).thenReturn(2.0d);
+		when(config.geTaxMaxPerLoot()).thenReturn("5m");
+		resolveToSelf("Player1", "Player2");
+
+		managerSession.startSession();
+		managerSession.addPlayerToActive("Player1");
+		managerSession.addPlayerToActive("Player2");
+		managerSession.stopSession();
+
+		Session historyRoot = managerSession.getHistorySessionsNewestFirst().get(0);
+		managerSession.loadHistory(historyRoot.getId());
+		managerSession.setHistoryEditWarningHandler(() -> false);
+
+		assertFalse(managerSession.updateSettlementConfigSnapshotFor(
+			historyRoot,
+			new com.splitmanager.models.SettlementConfigSnapshot(true, "15m", 10.0d, "10m")));
+		assertFalse(managerSession.isHistoryDirty());
+		assertEquals(2.0d, historyRoot.getSettlementConfigAtEnd().getGeTaxPercent(), 0.0d);
+	}
+
+	@Test
+	public void testDiscardHistoryChangesRestoresStagedHistoryEdit()
+	{
+		when(config.accountForGeTax()).thenReturn(true);
+		when(config.geTaxMinimumValue()).thenReturn("15m");
+		when(config.geTaxPercent()).thenReturn(2.0d);
+		when(config.geTaxMaxPerLoot()).thenReturn("5m");
+		resolveToSelf("Player1", "Player2");
+
+		managerSession.startSession();
+		managerSession.addPlayerToActive("Player1");
+		managerSession.addPlayerToActive("Player2");
+		managerSession.stopSession();
+
+		Session historyRoot = managerSession.getHistorySessionsNewestFirst().get(0);
+		managerSession.loadHistory(historyRoot.getId());
+
+		assertTrue(managerSession.updateSettlementConfigSnapshotFor(
+			historyRoot,
+			new com.splitmanager.models.SettlementConfigSnapshot(true, "15m", 10.0d, "10m")));
+		assertTrue(managerSession.isHistoryDirty());
+
+		assertTrue(managerSession.discardHistoryChanges());
+		Session restoredRoot = managerSession.getCurrentSession().get();
+
+		assertFalse(managerSession.isHistoryDirty());
+		assertEquals(2.0d, restoredRoot.getSettlementConfigAtEnd().getGeTaxPercent(), 0.0d);
+	}
+
+	@Test
+	public void testCanStagePlayerAndSplitAdditionsInLoadedHistory()
+	{
+		when(config.accountForGeTax()).thenReturn(false);
+		when(config.geTaxMinimumValue()).thenReturn("15m");
+		when(config.geTaxPercent()).thenReturn(2.0d);
+		when(config.geTaxMaxPerLoot()).thenReturn("5m");
+		resolveToSelf("Player1", "Player2");
+
+		managerSession.startSession();
+		managerSession.addPlayerToActive("Player1");
+		managerSession.stopSession();
+
+		Session historyRoot = managerSession.getHistorySessionsNewestFirst().get(0);
+		managerSession.loadHistory(historyRoot.getId());
+
+		assertTrue(managerSession.addPlayerToActive("Player2"));
+		assertTrue(managerSession.addKill("Player2", 100000L));
+		assertTrue(managerSession.isHistoryDirty());
+
+		Session editable = managerSession.getCurrentEditableSession().get();
+		assertTrue(editable.getPlayers().contains("Player2"));
+		assertTrue(managerSession.getAllKills().stream()
+			.anyMatch(kill -> "Player2".equals(kill.getPlayer()) && Long.valueOf(100000L).equals(kill.getAmount())));
 	}
 
 	@Test
@@ -692,6 +872,45 @@ public class ManagerSessionTest
 		assertEquals(200000L, kills.get(2).getAmount().longValue());
 		assertEquals(100000L, kills.get(3).getAmount().longValue());
 		assertEquals(kills.get(2).getSessionId(), kills.get(3).getSessionId());
+	}
+
+	@Test
+	public void testMoveKillRejectsLeftBeforeJoined()
+	{
+		managerSession.startSession();
+		String p1 = "Player1";
+		String p2 = "Player2";
+		resolveToSelf(p1, p2);
+
+		managerSession.addPlayerToActive(p1);
+		managerSession.addPlayerToActive(p2);
+		assertTrue(managerSession.removePlayerFromSession(p2));
+
+		List<Kill> before = managerSession.getAllKills();
+		int joinedIndex = -1;
+		int leftIndex = -1;
+		for (int i = 0; i < before.size(); i++)
+		{
+			Kill kill = before.get(i);
+			if (p2.equals(kill.getPlayer()) && Kill.TYPE_JOINED.equals(kill.getType()))
+			{
+				joinedIndex = i;
+			}
+			if (p2.equals(kill.getPlayer()) && Kill.TYPE_LEFT.equals(kill.getType()))
+			{
+				leftIndex = i;
+			}
+		}
+		assertTrue(joinedIndex >= 0);
+		assertTrue(leftIndex > joinedIndex);
+
+		assertFalse(managerSession.moveKill(leftIndex, joinedIndex));
+
+		List<Kill> after = managerSession.getAllKills();
+		assertEquals(Kill.TYPE_JOINED, after.get(joinedIndex).getType());
+		assertEquals(p2, after.get(joinedIndex).getPlayer());
+		assertEquals(Kill.TYPE_LEFT, after.get(leftIndex).getType());
+		assertEquals(p2, after.get(leftIndex).getPlayer());
 	}
 
 	@Test

@@ -87,6 +87,8 @@ RuneLite `PluginConfig` is used as the backing store:
 
 Avoid changing hidden config key names unless you also plan a migration path.
 
+When a config item changes the factual settlement calculation, persist the relevant calculation context on the mother session at thread start and at thread end. Historical session metrics should prefer the saved end context, then the saved start context, and only fall back to current global config for older sessions without saved context.
+
 ## Formatting And Units
 
 - `Formats.OsrsAmountFormatter` parses OSRS amounts like `10k`, `1.1m`, `1b`, and `coins`.

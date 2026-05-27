@@ -5,6 +5,7 @@ import com.splitmanager.models.Metrics;
 import com.splitmanager.models.PendingValue;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.RecentSplitsTable;
+import com.splitmanager.models.SettlementConfigSnapshot;
 import com.splitmanager.models.WaitlistTable;
 import java.time.Instant;
 import java.util.Arrays;
@@ -116,7 +117,7 @@ public class TableModelsTest
 	}
 
 	@Test
-	public void testRecentSplitsTableMarksTaxedLootRows()
+	public void testRecentSplitsTableDisplaysTaxAndCleanSplitAmounts()
 	{
 		PluginConfig config = mock(PluginConfig.class);
 		when(config.accountForGeTax()).thenReturn(true);
@@ -124,15 +125,53 @@ public class TableModelsTest
 		when(config.geTaxPercent()).thenReturn(2.0d);
 		RecentSplitsTable table = new RecentSplitsTable(config);
 		Kill untaxed = new Kill("session", "Alice", 14000000L, Instant.parse("2024-01-01T00:00:00Z"));
-		Kill taxed = new Kill("session", "Bob", 15000000L, Instant.parse("2024-01-01T00:01:00Z"));
+		Kill taxed = new Kill("session", "Bob", 100000000L, Instant.parse("2024-01-01T00:01:00Z"));
 		Kill joined = new Kill("session", "Cara", 100000000L, Instant.parse("2024-01-01T00:02:00Z"));
 		joined.setType("JOINED");
 
 		table.setFromKills(Arrays.asList(untaxed, taxed, joined));
 
+		assertEquals("Joined", table.getValueAt(0, 2));
 		assertEquals("", table.getValueAt(0, 3));
-		assertEquals("*", table.getValueAt(1, 3));
+		assertEquals("98,000K", table.getValueAt(1, 2));
+		assertEquals("2M", table.getValueAt(1, 3));
+		assertEquals("14,000K", table.getValueAt(2, 2));
 		assertEquals("", table.getValueAt(2, 3));
+	}
+
+	@Test
+	public void testRecentSplitsTableUsesConfiguredGeTaxCap()
+	{
+		PluginConfig config = mock(PluginConfig.class);
+		when(config.accountForGeTax()).thenReturn(true);
+		when(config.geTaxMinimumValue()).thenReturn("15m");
+		when(config.geTaxPercent()).thenReturn(2.0d);
+		when(config.geTaxMaxPerLoot()).thenReturn("10m");
+		RecentSplitsTable table = new RecentSplitsTable(config);
+		Kill taxed = new Kill("session", "Alice", 1000000000L, Instant.parse("2024-01-01T00:00:00Z"));
+
+		table.setFromKills(Collections.singletonList(taxed));
+
+		assertEquals("990,000K", table.getValueAt(0, 2));
+		assertEquals("10M", table.getValueAt(0, 3));
+	}
+
+	@Test
+	public void testRecentSplitsTableUsesSavedSettlementConfigSnapshot()
+	{
+		PluginConfig config = mock(PluginConfig.class);
+		when(config.accountForGeTax()).thenReturn(true);
+		when(config.geTaxMinimumValue()).thenReturn("15m");
+		when(config.geTaxPercent()).thenReturn(10.0d);
+		when(config.geTaxMaxPerLoot()).thenReturn("10m");
+		RecentSplitsTable table = new RecentSplitsTable(config);
+		table.setSettlementConfigSnapshot(new SettlementConfigSnapshot(true, "15m", 2.0d, "5m"));
+		Kill taxed = new Kill("session", "Alice", 100000000L, Instant.parse("2024-01-01T00:00:00Z"));
+
+		table.setFromKills(Collections.singletonList(taxed));
+
+		assertEquals("98,000K", table.getValueAt(0, 2));
+		assertEquals("2M", table.getValueAt(0, 3));
 	}
 
 	@Test
@@ -167,19 +206,22 @@ public class TableModelsTest
 	}
 
 	@Test
-	public void testRecentSplitsTableGeTaxMarkerHandlesInvalidConfig()
+	public void testRecentSplitsTableGeTaxDisplayHandlesInvalidConfig()
 	{
 		PluginConfig config = mock(PluginConfig.class);
 		when(config.accountForGeTax()).thenReturn(true);
 		RecentSplitsTable table = new RecentSplitsTable(config);
-		Kill taxed = new Kill("session", "Alice", 15000000L, Instant.parse("2024-01-01T00:00:00Z"));
+		Kill taxed = new Kill("session", "Alice", 1000000000L, Instant.parse("2024-01-01T00:00:00Z"));
 		table.setFromKills(Collections.singletonList(taxed));
 
 		when(config.geTaxPercent()).thenReturn(Double.NaN);
 		when(config.geTaxMinimumValue()).thenReturn("not-an-amount");
-		assertEquals("*", table.getValueAt(0, 3));
+		when(config.geTaxMaxPerLoot()).thenReturn("5m");
+		assertEquals("995,000K", table.getValueAt(0, 2));
+		assertEquals("5M", table.getValueAt(0, 3));
 
 		when(config.geTaxPercent()).thenReturn(0.0d);
+		assertEquals("1,000,000K", table.getValueAt(0, 2));
 		assertEquals("", table.getValueAt(0, 3));
 	}
 

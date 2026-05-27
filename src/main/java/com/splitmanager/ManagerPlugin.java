@@ -182,6 +182,7 @@ public class ManagerPlugin extends Plugin
 			case "accountForGeTax":
 			case "geTaxMinimumValue":
 			case "geTaxPercent":
+			case "geTaxMaxPerLoot":
 				if (panelManager != null)
 				{
 					panelManager.refreshAllView();

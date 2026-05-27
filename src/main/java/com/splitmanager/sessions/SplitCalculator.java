@@ -108,8 +108,8 @@ public class SplitCalculator
 				continue;
 			}
 			long killAmount = kill.getAmount();
-			perSessionTotals.computeIfPresent(kill.getPlayer(), (player, value) -> value + killAmount);
-			applyGeTaxIfNeeded(kill, killAmount, splits, geTaxSettings);
+			long splitAmount = computeSplitAmount(killAmount, geTaxSettings);
+			perSessionTotals.computeIfPresent(kill.getPlayer(), (player, value) -> value + splitAmount);
 		}
 
 		long sessionAverage = sum(perSessionTotals) / perSessionTotals.size();
@@ -128,25 +128,20 @@ public class SplitCalculator
 		}
 	}
 
-	private void applyGeTaxIfNeeded(Kill kill,
-	                                long killAmount,
-	                                Map<String, Long> splits,
-	                                GeTaxSettings geTaxSettings)
+	private long computeSplitAmount(long killAmount, GeTaxSettings geTaxSettings)
 	{
-		if (!geTaxSettings.enabled
-			|| killAmount < geTaxSettings.minimumValue
-			|| !splits.containsKey(kill.getPlayer()))
+		if (!geTaxSettings.enabled || killAmount < geTaxSettings.minimumValue)
 		{
-			return;
+			return killAmount;
 		}
 
 		long geTax = computeGeTax(killAmount, geTaxSettings);
 		if (geTax <= 0L)
 		{
-			return;
+			return killAmount;
 		}
 
-		splits.compute(kill.getPlayer(), (ignored, value) -> value - geTax);
+		return Math.max(killAmount - geTax, 0L);
 	}
 
 	private long computeGeTax(long killAmount, GeTaxSettings geTaxSettings)
@@ -186,6 +181,26 @@ public class SplitCalculator
 		public static GeTaxSettings disabled()
 		{
 			return new GeTaxSettings(false, 0L, 0.0d, 0L);
+		}
+
+		public boolean isEnabled()
+		{
+			return enabled;
+		}
+
+		public long getMinimumValue()
+		{
+			return minimumValue;
+		}
+
+		public double getPercent()
+		{
+			return percent;
+		}
+
+		public long getMaxTaxPerLoot()
+		{
+			return maxTaxPerLoot;
 		}
 	}
 }

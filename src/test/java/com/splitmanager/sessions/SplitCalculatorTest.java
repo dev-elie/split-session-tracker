@@ -60,7 +60,7 @@ public class SplitCalculatorTest
 	}
 
 	@Test
-	public void appliesGeTaxToSellerOnly()
+	public void appliesGeTaxToSplitValue()
 	{
 		Session mother = new Session("mother", Instant.EPOCH, null);
 		Session current = new Session("current", Instant.EPOCH.plusSeconds(1), "mother");
@@ -75,12 +75,34 @@ public class SplitCalculatorTest
 			new SplitCalculator.GeTaxSettings(true, 15000000L, 2.0d, 5000000L));
 
 		assertEquals(5, metrics.size());
-		assertEquals(100000000L, (long) find(metrics, "A").total);
-		assertEquals(-82000000L, (long) find(metrics, "A").split);
-		assertEquals(20000000L, (long) find(metrics, "B").split);
-		assertEquals(20000000L, (long) find(metrics, "C").split);
-		assertEquals(20000000L, (long) find(metrics, "D").split);
-		assertEquals(20000000L, (long) find(metrics, "E").split);
+		assertEquals(98000000L, (long) find(metrics, "A").total);
+		assertEquals(-78400000L, (long) find(metrics, "A").split);
+		assertEquals(19600000L, (long) find(metrics, "B").split);
+		assertEquals(19600000L, (long) find(metrics, "C").split);
+		assertEquals(19600000L, (long) find(metrics, "D").split);
+		assertEquals(19600000L, (long) find(metrics, "E").split);
+	}
+
+	@Test
+	public void appliesGeTaxToThreePersonSplitValue()
+	{
+		Session mother = new Session("mother", Instant.EPOCH, null);
+		Session current = new Session("current", Instant.EPOCH.plusSeconds(1), "mother");
+		current.getPlayers().addAll(Arrays.asList("A", "B", "C"));
+		current.getKills().add(new Kill("current", "A", 100000000L, Instant.EPOCH.plusSeconds(2)));
+
+		List<PlayerMetrics> metrics = new SplitCalculator().compute(
+			current,
+			Arrays.asList(mother, current),
+			new LinkedHashSet<>(current.getPlayers()),
+			true,
+			new SplitCalculator.GeTaxSettings(true, 15000000L, 2.0d, 5000000L));
+
+		assertEquals(3, metrics.size());
+		assertEquals(98000000L, (long) find(metrics, "A").total);
+		assertEquals(-65333334L, (long) find(metrics, "A").split);
+		assertEquals(32666666L, (long) find(metrics, "B").split);
+		assertEquals(32666666L, (long) find(metrics, "C").split);
 	}
 
 	@Test
@@ -102,9 +124,9 @@ public class SplitCalculatorTest
 		PlayerMetrics a = find(metrics, "A");
 		PlayerMetrics b = find(metrics, "B");
 
-		assertEquals(414000000L, (long) a.total);
-		assertEquals(-212000000L, (long) a.split);
-		assertEquals(207000000L, (long) b.split);
+		assertEquals(409000000L, (long) a.total);
+		assertEquals(-204500000L, (long) a.split);
+		assertEquals(204500000L, (long) b.split);
 	}
 
 	@Test

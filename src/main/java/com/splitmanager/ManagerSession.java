@@ -5,6 +5,7 @@ import com.splitmanager.models.Kill;
 import com.splitmanager.models.PendingValue;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.Session;
+import com.splitmanager.models.SettlementConfigSnapshot;
 import com.splitmanager.sessions.SplitCalculator;
 import com.splitmanager.utils.Formats;
 import com.splitmanager.utils.InstantTypeAdapter;
@@ -16,10 +17,12 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -43,6 +46,10 @@ public class ManagerSession
 	private final SplitCalculator splitCalculator;
 	// Cache of all kills grouped by mother session id to avoid recomputing on every UI refresh
 	private final Map<String, List<Kill>> motherKillsCache = new LinkedHashMap<>();
+	private BooleanSupplier historyEditWarningHandler;
+	private boolean historyEditWarningAccepted;
+	private boolean historyDirty;
+	private String historyOriginalSessionsJson;
 
 	/**
 	 * Force a full rebuild of the kills cache for the current session's thread.
@@ -58,6 +65,10 @@ public class ManagerSession
 	public void insertKillAt(int index, String player, Long amount)
 	{
 		getCurrentSession().ifPresent(curr -> {
+			if (!prepareHistoryMutation())
+			{
+				return;
+			}
 			String mainPlayer = resolveMainName(player);
 			if (mainPlayer == null)
 			{
@@ -67,7 +78,7 @@ public class ManagerSession
 			kill.setType(Kill.TYPE_LOOT);
 			curr.getKills().add(kill);
 			invalidateKillsCache();
-			saveToConfig();
+			saveAfterMutation();
 		});
 	}
 
@@ -99,6 +110,10 @@ public class ManagerSession
 		{
 			return;
 		}
+		if (!prepareHistoryMutation())
+		{
+			return;
+		}
 
 		repairRostersBeforeRemoving(killsToRemove);
 		for (Session s : sessions.values())
@@ -106,7 +121,7 @@ public class ManagerSession
 			s.getKills().removeAll(killsToRemove);
 		}
 		invalidateKillsCache();
-		saveToConfig();
+		saveAfterMutation();
 	}
 
 	private void repairRostersBeforeRemoving(List<Kill> killsToRemove)
@@ -222,16 +237,16 @@ public class ManagerSession
 		session.getPlayers().add(player);
 	}
 
-	public void moveKill(int fromIndex, int toIndex)
+	public boolean moveKill(int fromIndex, int toIndex)
 	{
 		List<Kill> allKills = getAllKills();
 		if (fromIndex < 0 || fromIndex >= allKills.size() || toIndex < 0 || toIndex > allKills.size())
 		{
-			return;
+			return false;
 		}
 		if (toIndex == fromIndex || toIndex == fromIndex + 1)
 		{
-			return;
+			return false;
 		}
 
 		Kill kill = allKills.get(fromIndex);
@@ -244,6 +259,16 @@ public class ManagerSession
 			insertionIndex--;
 		}
 		insertionIndex = Math.max(0, Math.min(insertionIndex, remainingKills.size()));
+		List<Kill> reorderedKills = new ArrayList<>(remainingKills);
+		reorderedKills.add(insertionIndex, kill);
+		if (!hasValidRosterEventOrder(reorderedKills))
+		{
+			return false;
+		}
+		if (!prepareHistoryMutation())
+		{
+			return false;
+		}
 
 		String targetSessionId = currentSessionId;
 		if (!remainingKills.isEmpty())
@@ -262,8 +287,8 @@ public class ManagerSession
 		if (targetSession == null)
 		{
 			invalidateKillsCache();
-			saveToConfig();
-			return;
+			saveAfterMutation();
+			return true;
 		}
 
 		Kill movedKill = kill;
@@ -283,7 +308,36 @@ public class ManagerSession
 		targetSession.getKills().add(localTargetIndex, movedKill);
 
 		invalidateKillsCache();
-		saveToConfig();
+		saveAfterMutation();
+		return true;
+	}
+
+	private boolean hasValidRosterEventOrder(List<Kill> kills)
+	{
+		Map<String, Boolean> seenJoinByPlayer = new LinkedHashMap<>();
+		Set<String> playersWithJoin = kills.stream()
+			.filter(kill -> kill != null && Kill.TYPE_JOINED.equalsIgnoreCase(kill.getType()) && kill.getPlayer() != null)
+			.map(kill -> kill.getPlayer().toLowerCase(Locale.ENGLISH))
+			.collect(Collectors.toSet());
+		for (Kill kill : kills)
+		{
+			if (kill == null || kill.getPlayer() == null)
+			{
+				continue;
+			}
+			String player = kill.getPlayer().toLowerCase(Locale.ENGLISH);
+			if (Kill.TYPE_JOINED.equalsIgnoreCase(kill.getType()))
+			{
+				seenJoinByPlayer.put(player, true);
+			}
+			else if (Kill.TYPE_LEFT.equalsIgnoreCase(kill.getType())
+				&& playersWithJoin.contains(player)
+				&& !seenJoinByPlayer.containsKey(player))
+			{
+				return false;
+			}
+		}
+		return true;
 	}
 
 	private void removeKillFromSession(Kill kill)
@@ -592,6 +646,8 @@ public class ManagerSession
 	{
 		Session copy = new Session(id, source.getStart(), motherId);
 		copy.setEnd(source.getEnd());
+		copy.setSettlementConfigAtStart(source.getSettlementConfigAtStart());
+		copy.setSettlementConfigAtEnd(source.getSettlementConfigAtEnd());
 		if (source.getPlayers() != null)
 		{
 			copy.getPlayers().addAll(source.getPlayers());
@@ -630,14 +686,14 @@ public class ManagerSession
 	 */
 	public Set<String> getNonActivePlayers()
 	{
-		Session curr = getCurrentSession().orElse(null);
+		Session curr = getCurrentEditableSession().orElse(null);
 		Set<String> mains = playerManager.getKnownMains();
 		if (mains == null)
 		{
 			return Collections.emptySet();
 		}
 
-		if (curr == null || !curr.isActive())
+		if (curr == null || (!historyLoaded && !curr.isActive()))
 		{
 			return Collections.unmodifiableSet(mains);
 		}
@@ -688,7 +744,14 @@ public class ManagerSession
 		{
 			currentSessionId = null;
 		}
+		if (historyDirty)
+		{
+			restoreOriginalHistorySessions();
+		}
 		historyLoaded = false;
+		historyDirty = false;
+		historyEditWarningAccepted = false;
+		historyOriginalSessionsJson = null;
 		saveToConfig();
 	}
 
@@ -710,10 +773,81 @@ public class ManagerSession
 		{
 			return Optional.empty();
 		}
+		historyOriginalSessionsJson = gson.toJson(sessions.values());
+		historyDirty = false;
+		historyEditWarningAccepted = false;
 		currentSessionId = s.getId();
 		historyLoaded = true;
 		saveToConfig();
 		return Optional.of(s);
+	}
+
+	public boolean saveHistoryChanges()
+	{
+		if (!historyLoaded)
+		{
+			return false;
+		}
+		historyDirty = false;
+		historyEditWarningAccepted = false;
+		historyOriginalSessionsJson = gson.toJson(sessions.values());
+		saveToConfig();
+		return true;
+	}
+
+	public boolean discardHistoryChanges()
+	{
+		if (!historyLoaded)
+		{
+			return false;
+		}
+		String selectedSessionId = currentSessionId;
+		if (historyDirty)
+		{
+			restoreOriginalHistorySessions();
+		}
+		currentSessionId = selectedSessionId;
+		historyLoaded = true;
+		historyDirty = false;
+		historyEditWarningAccepted = false;
+		historyOriginalSessionsJson = gson.toJson(sessions.values());
+		saveToConfig();
+		return true;
+	}
+
+	public boolean isHistoryDirty()
+	{
+		return historyDirty;
+	}
+
+	private void restoreOriginalHistorySessions()
+	{
+		if (historyOriginalSessionsJson == null || historyOriginalSessionsJson.trim().isEmpty())
+		{
+			loadFromConfig();
+			return;
+		}
+		try
+		{
+			Session[] arr = gson.fromJson(historyOriginalSessionsJson, Session[].class);
+			sessions.clear();
+			if (arr != null)
+			{
+				for (Session session : arr)
+				{
+					if (session != null && session.getId() != null)
+					{
+						sessions.put(session.getId(), session);
+					}
+				}
+			}
+			motherKillsCache.clear();
+		}
+		catch (Exception e)
+		{
+			log.warn("Failed to restore unsaved history edits; reloading persisted sessions", e);
+			loadFromConfig();
+		}
 	}
 
 	/**
@@ -722,6 +856,22 @@ public class ManagerSession
 	public boolean hasActiveSession()
 	{
 		return getCurrentSession().map(Session::isActive).orElse(false);
+	}
+
+	public Optional<Session> getCurrentEditableSession()
+	{
+		Session current = getCurrentSession().orElse(null);
+		if (current == null)
+		{
+			return Optional.empty();
+		}
+		if (!historyLoaded || current.getMotherId() != null)
+		{
+			return Optional.of(current);
+		}
+		return getThreadSessions(current).stream()
+			.filter(session -> session.getMotherId() != null)
+			.max(Comparator.comparing(Session::getStart));
 	}
 
 	/**
@@ -743,6 +893,7 @@ public class ManagerSession
 
 		// Create mother and an initial child immediately (to mirror sheet)
 		Session mother = new Session(newId(), Instant.now(), null);
+		mother.setSettlementConfigAtStart(currentSettlementConfigSnapshot());
 		sessions.put(mother.getId(), mother);
 		// initialize empty cache list for this mother thread
 		motherKillsCache.put(mother.getId(), new ArrayList<>());
@@ -786,6 +937,7 @@ public class ManagerSession
 			Session mother = sessions.get(curr.getMotherId());
 			if (mother != null && mother.isActive())
 			{
+				mother.setSettlementConfigAtEnd(currentSettlementConfigSnapshot());
 				mother.setEnd(Instant.now());
 			}
 		}
@@ -810,12 +962,8 @@ public class ManagerSession
 	 */
 	public boolean addPlayerToActive(String player)
 	{
-		if (historyLoaded)
-		{
-			return false;
-		}
-		Session curr = getCurrentSession().orElse(null);
-		if (curr == null || !curr.isActive())
+		Session curr = getCurrentEditableSession().orElse(null);
+		if (curr == null || (!historyLoaded && !curr.isActive()))
 		{
 			return false;
 		}
@@ -830,6 +978,22 @@ public class ManagerSession
 		{
 			// Player (main) already in session
 			return false;
+		}
+		if (!prepareHistoryMutation())
+		{
+			return false;
+		}
+
+		if (historyLoaded)
+		{
+			curr.getPlayers().add(fMain);
+			Kill joinEvent = new Kill(curr.getId(), fMain, 0L, Instant.now());
+			joinEvent.setType(Kill.TYPE_JOINED);
+			curr.getKills().add(joinEvent);
+			String motherId = curr.getMotherId() == null ? curr.getId() : curr.getMotherId();
+			motherKillsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(joinEvent);
+			saveAfterMutation();
+			return true;
 		}
 
 		if (curr.hasKills())
@@ -869,7 +1033,7 @@ public class ManagerSession
 			String motherId = curr.getMotherId() == null ? curr.getId() : curr.getMotherId();
 			motherKillsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(joinEvent);
 		}
-		saveToConfig();
+		saveAfterMutation();
 		return true;
 	}
 
@@ -883,12 +1047,8 @@ public class ManagerSession
 	 */
 	public boolean removePlayerFromSession(String player)
 	{
-		if (historyLoaded)
-		{
-			return false;
-		}
-		Session curr = getCurrentSession().orElse(null);
-		if (curr == null || !curr.isActive())
+		Session curr = getCurrentEditableSession().orElse(null);
+		if (curr == null || (!historyLoaded && !curr.isActive()))
 		{
 			return false;
 		}
@@ -906,6 +1066,23 @@ public class ManagerSession
 		if (curr.getPlayers().stream().noneMatch(p -> p.equalsIgnoreCase(resolvedPlayer)))
 		{
 			return false;
+		}
+		if (!prepareHistoryMutation())
+		{
+			return false;
+		}
+
+		if (historyLoaded)
+		{
+			String finalPlayer = player;
+			curr.getPlayers().removeIf(p -> p.equalsIgnoreCase(finalPlayer));
+			Kill leaveEvent = new Kill(curr.getId(), player, 0L, Instant.now());
+			leaveEvent.setType(Kill.TYPE_LEFT);
+			curr.getKills().add(leaveEvent);
+			String motherId = curr.getMotherId() == null ? curr.getId() : curr.getMotherId();
+			motherKillsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(leaveEvent);
+			saveAfterMutation();
+			return true;
 		}
 
 		if (curr.hasKills())
@@ -945,7 +1122,7 @@ public class ManagerSession
 			String motherId = curr.getMotherId() == null ? curr.getId() : curr.getMotherId();
 			motherKillsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(leaveEvent);
 		}
-		saveToConfig();
+		saveAfterMutation();
 		return true;
 	}
 
@@ -959,13 +1136,8 @@ public class ManagerSession
 	 */
 	public boolean addKill(String player, Long amount)
 	{
-		if (historyLoaded)
-		{
-			return false;
-		}
-
-		Session currentSession = getCurrentSession().orElse(null);
-		if (currentSession == null || !currentSession.isActive())
+		Session currentSession = getCurrentEditableSession().orElse(null);
+		if (currentSession == null || (!historyLoaded && !currentSession.isActive()))
 		{
 			return false;
 		}
@@ -983,6 +1155,10 @@ public class ManagerSession
 		{
 			return false;
 		}
+		if (!prepareHistoryMutation())
+		{
+			return false;
+		}
 
 		Kill newKill = new Kill(currentSession.getId(), mainPlayer, amount, Instant.now());
 		currentSession.getKills().add(newKill);
@@ -991,7 +1167,7 @@ public class ManagerSession
 		String motherId = currentSession.getMotherId() == null ? currentSession.getId() : currentSession.getMotherId();
 		motherKillsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(newKill);
 
-		saveToConfig();
+		saveAfterMutation();
 		return true;
 	}
 
@@ -1117,6 +1293,51 @@ public class ManagerSession
 		loadFromConfig();
 	}
 
+	public void setHistoryEditWarningHandler(BooleanSupplier historyEditWarningHandler)
+	{
+		this.historyEditWarningHandler = historyEditWarningHandler;
+	}
+
+	public boolean prepareHistoryMutation()
+	{
+		if (!historyLoaded)
+		{
+			return true;
+		}
+		if (!historyEditWarningAccepted)
+		{
+			boolean accepted = historyEditWarningHandler == null || historyEditWarningHandler.getAsBoolean();
+			if (!accepted)
+			{
+				return false;
+			}
+			historyEditWarningAccepted = true;
+		}
+		historyDirty = true;
+		return true;
+	}
+
+	public void markHistoryMutation()
+	{
+		if (historyLoaded)
+		{
+			historyDirty = true;
+			invalidateKillsCache();
+			return;
+		}
+		saveToConfig();
+	}
+
+	private void saveAfterMutation()
+	{
+		if (historyLoaded)
+		{
+			historyDirty = true;
+			return;
+		}
+		saveToConfig();
+	}
+
 	/**
 	 * Compute metrics for the given session's thread (mother + children) including only currently active players.
 	 *
@@ -1150,21 +1371,126 @@ public class ManagerSession
 			getThreadSessions(s),
 			playerManager.getKnownPlayers(),
 			includeNonActivePlayers,
-			buildGeTaxSettings());
+			buildGeTaxSettings(s));
 	}
 
-	private SplitCalculator.GeTaxSettings buildGeTaxSettings()
+	public List<PlayerMetrics> computeMetricsFor(Session s,
+	                                             boolean includeNonActivePlayers,
+	                                             SettlementConfigSnapshot overrideSnapshot)
 	{
-		if (config == null || !config.accountForGeTax())
+		if (s == null)
+		{
+			return List.of();
+		}
+
+		return splitCalculator.compute(
+			s,
+			getThreadSessions(s),
+			playerManager.getKnownPlayers(),
+			includeNonActivePlayers,
+			buildGeTaxSettings(overrideSnapshot));
+	}
+
+	private SplitCalculator.GeTaxSettings buildGeTaxSettings(Session session)
+	{
+		SettlementConfigSnapshot snapshot = getHistoricalSettlementConfigSnapshot(session);
+		if (snapshot != null)
+		{
+			return buildGeTaxSettings(snapshot);
+		}
+		return buildGeTaxSettings(currentSettlementConfigSnapshot());
+	}
+
+	private SplitCalculator.GeTaxSettings buildGeTaxSettings(SettlementConfigSnapshot snapshot)
+	{
+		if (snapshot == null || !snapshot.isAccountForGeTax())
 		{
 			return SplitCalculator.GeTaxSettings.disabled();
 		}
 
 		return new SplitCalculator.GeTaxSettings(
 			true,
-			parseGeTaxMinimumValue(config.geTaxMinimumValue()),
-			sanitizeGeTaxPercent(config.geTaxPercent()),
-			PluginConfig.DEFAULT_GE_TAX_MAX_PER_LOOT);
+			parseGeTaxMinimumValue(snapshot.getGeTaxMinimumValue()),
+			sanitizeGeTaxPercent(snapshot.getGeTaxPercent()),
+			parseGeTaxMaxPerLoot(snapshot.getGeTaxMaxPerLoot()));
+	}
+
+	public SplitCalculator.GeTaxSettings getGeTaxSettingsFor(SettlementConfigSnapshot snapshot)
+	{
+		return buildGeTaxSettings(snapshot);
+	}
+
+	public SettlementConfigSnapshot getSettlementConfigSnapshotFor(Session session)
+	{
+		SettlementConfigSnapshot historicalSnapshot = getHistoricalSettlementConfigSnapshot(session);
+		return historicalSnapshot == null ? currentSettlementConfigSnapshot() : historicalSnapshot;
+	}
+
+	public boolean updateSettlementConfigSnapshotFor(Session session, SettlementConfigSnapshot snapshot)
+	{
+		if (session == null || snapshot == null)
+		{
+			return false;
+		}
+		Session mother = sessions.get(getRootSessionId(session));
+		if (mother == null || mother.isActive())
+		{
+			return false;
+		}
+		if (!prepareHistoryMutation())
+		{
+			return false;
+		}
+		mother.setSettlementConfigAtEnd(snapshot);
+		if (mother.getSettlementConfigAtStart() == null)
+		{
+			mother.setSettlementConfigAtStart(snapshot);
+		}
+		saveAfterMutation();
+		return true;
+	}
+
+	private SettlementConfigSnapshot getHistoricalSettlementConfigSnapshot(Session session)
+	{
+		if (session == null)
+		{
+			return null;
+		}
+		if (session.isActive())
+		{
+			return null;
+		}
+		Session mother = sessions.get(getRootSessionId(session));
+		if (mother == null || mother.isActive())
+		{
+			return null;
+		}
+		if (mother.getSettlementConfigAtEnd() != null)
+		{
+			return mother.getSettlementConfigAtEnd();
+		}
+		return mother.getSettlementConfigAtStart();
+	}
+
+	private SettlementConfigSnapshot currentSettlementConfigSnapshot()
+	{
+		if (config == null)
+		{
+			return new SettlementConfigSnapshot(false,
+				PluginConfig.DEFAULT_GE_TAX_MINIMUM_VALUE,
+				PluginConfig.DEFAULT_GE_TAX_PERCENT,
+				PluginConfig.DEFAULT_GE_TAX_MAX_PER_LOOT_VALUE);
+		}
+		return new SettlementConfigSnapshot(
+			config.accountForGeTax(),
+			defaultString(config.geTaxMinimumValue(), PluginConfig.DEFAULT_GE_TAX_MINIMUM_VALUE),
+			config.geTaxPercent(),
+			defaultString(config.geTaxMaxPerLoot(), PluginConfig.DEFAULT_GE_TAX_MAX_PER_LOOT_VALUE));
+	}
+
+	private String defaultString(String value, String defaultValue)
+	{
+		return value == null || value.trim().isEmpty() ? defaultValue : value;
 	}
 
 	private long parseGeTaxMinimumValue(String configuredValue)
@@ -1193,6 +1519,35 @@ public class ManagerSession
 		{
 			log.warn("Failed to parse built-in GE tax minimum {}; disabling GE tax threshold", PluginConfig.DEFAULT_GE_TAX_MINIMUM_VALUE, e);
 			return 0L;
+		}
+	}
+
+	private long parseGeTaxMaxPerLoot(String configuredValue)
+	{
+		String valueToParse = configuredValue == null || configuredValue.trim().isEmpty()
+			? PluginConfig.DEFAULT_GE_TAX_MAX_PER_LOOT_VALUE
+			: configuredValue.trim();
+		try
+		{
+			return Formats.OsrsAmountFormatter.stringAmountToLongAmount(valueToParse, null);
+		}
+		catch (ParseException e)
+		{
+			log.warn("Failed to parse GE tax max per loot {}; using default {}", valueToParse, PluginConfig.DEFAULT_GE_TAX_MAX_PER_LOOT_VALUE, e);
+			return defaultGeTaxMaxPerLoot();
+		}
+	}
+
+	private long defaultGeTaxMaxPerLoot()
+	{
+		try
+		{
+			return Formats.OsrsAmountFormatter.stringAmountToLongAmount(PluginConfig.DEFAULT_GE_TAX_MAX_PER_LOOT_VALUE, null);
+		}
+		catch (ParseException e)
+		{
+			log.warn("Failed to parse built-in GE tax max per loot {}; using default {}", PluginConfig.DEFAULT_GE_TAX_MAX_PER_LOOT_VALUE, PluginConfig.DEFAULT_GE_TAX_MAX_PER_LOOT, e);
+			return PluginConfig.DEFAULT_GE_TAX_MAX_PER_LOOT;
 		}
 	}
 
