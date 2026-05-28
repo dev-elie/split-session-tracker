@@ -16,7 +16,6 @@ import com.splitmanager.views.PanelView;
 import java.awt.Color;
 import java.awt.HeadlessException;
 import java.awt.Toolkit;
-import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.UnsupportedFlavorException;
