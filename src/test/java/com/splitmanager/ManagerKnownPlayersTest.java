@@ -22,13 +22,11 @@ import org.mockito.junit.MockitoJUnitRunner;
 @RunWith(MockitoJUnitRunner.class)
 public class ManagerKnownPlayersTest
 {
-	@Mock
-	private PluginConfig config;
-
 	private final Gson gson = new Gson().newBuilder()
 		.registerTypeAdapter(Instant.class, new InstantTypeAdapter())
 		.create();
-
+	@Mock
+	private PluginConfig config;
 	private ManagerKnownPlayers playerManager;
 
 	@Before

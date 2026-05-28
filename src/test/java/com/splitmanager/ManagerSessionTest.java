@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.Set;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -33,19 +34,15 @@ import org.mockito.junit.MockitoJUnitRunner;
 @RunWith(MockitoJUnitRunner.class)
 public class ManagerSessionTest
 {
-	@Mock
-	private PluginConfig config;
-
-	@Mock
-	private ManagerKnownPlayers playerManager;
-
-	@Mock
-	private ManagerPlugin pluginManager;
-
 	private final Gson gson = new Gson().newBuilder()
 		.registerTypeAdapter(Instant.class, new InstantTypeAdapter())
 		.create();
-
+	@Mock
+	private PluginConfig config;
+	@Mock
+	private ManagerKnownPlayers playerManager;
+	@Mock
+	private ManagerPlugin pluginManager;
 	private ManagerSession managerSession;
 
 	@Before
@@ -147,7 +144,7 @@ public class ManagerSessionTest
 
 		Session importedRoot = imported.getHistorySessionsNewestFirst().get(0);
 		assertNull(importedRoot.getMotherId());
-		assertFalse(sourceRoot.getId().equals(importedRoot.getId()));
+		assertNotEquals(sourceRoot.getId(), importedRoot.getId());
 		assertFalse(importedRoot.isActive());
 
 		Session importedChild = imported.getAllSessionsNewestFirst().stream()
