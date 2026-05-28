@@ -8,6 +8,7 @@ import com.splitmanager.models.Session;
 import com.splitmanager.utils.InstantTypeAdapter;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -71,6 +72,20 @@ public class ManagerSessionTest
 			.filter(metric -> player.equals(metric.player))
 			.findFirst()
 			.orElseThrow(() -> new AssertionError("Missing metric for " + player));
+	}
+
+	private int findKillIndex(String type, String player)
+	{
+		List<Kill> kills = managerSession.getAllKills();
+		for (int i = kills.size() - 1; i >= 0; i--)
+		{
+			Kill kill = kills.get(i);
+			if (type.equalsIgnoreCase(kill.getType()) && player.equalsIgnoreCase(kill.getPlayer()))
+			{
+				return i;
+			}
+		}
+		return -1;
 	}
 
 	@Test
@@ -974,5 +989,121 @@ public class ManagerSessionTest
 
 		assertTrue(metrics.stream().anyMatch(m -> active.equals(m.player) && m.activePlayer));
 		assertFalse(metrics.stream().anyMatch(m -> "Unused".equals(m.player)));
+	}
+
+	@Test
+	public void testRemoveKillsRepairsRosterAcrossJoinAndLeaveEventsInHistoryMode()
+	{
+		managerSession.startSession();
+		resolveToSelf("Player1", "Player2");
+
+		managerSession.addPlayerToActive("Player1");
+		managerSession.addPlayerToActive("Player2");
+		managerSession.stopSession();
+
+		Session historyRoot = managerSession.getHistorySessionsNewestFirst().get(0);
+		managerSession.loadHistory(historyRoot.getId());
+		managerSession.addPlayerToActive("Player2");
+		managerSession.removePlayerFromSession("Player2");
+
+		int joinedIndex = findKillIndex(Kill.TYPE_JOINED, "Player2");
+		int leftIndex = findKillIndex(Kill.TYPE_LEFT, "Player2");
+		assertTrue(joinedIndex >= 0);
+		assertTrue(leftIndex >= 0);
+
+			managerSession.removeKillsAt(Arrays.asList(joinedIndex, leftIndex));
+
+			Session current = requireSession(managerSession.getCurrentSession());
+			assertFalse(managerSession.getAllKills().stream().anyMatch(kill ->
+				"Player2".equalsIgnoreCase(kill.getPlayer()) && kill.isRosterEvent()));
+		}
+
+	@Test
+	public void testInsertAndMoveKillEdgeCases()
+	{
+		managerSession.startSession();
+		resolveToSelf("Player1", "Player2");
+
+		managerSession.addPlayerToActive("Player1");
+		managerSession.addPlayerToActive("Player2");
+		managerSession.addKill("Player1", 100L);
+
+		managerSession.insertKillAt(0, "Player1", 250L);
+		assertTrue(managerSession.getAllKills().stream().anyMatch(kill ->
+			Long.valueOf(250L).equals(kill.getAmount()) && Kill.TYPE_LOOT.equalsIgnoreCase(kill.getType())));
+
+		assertFalse(managerSession.moveKill(-1, 0));
+		assertFalse(managerSession.moveKill(0, 0));
+
+		int insertIndex = findKillIndex(Kill.TYPE_LOOT, "Player1");
+		assertTrue(insertIndex >= 0);
+		assertTrue(managerSession.moveKill(insertIndex, 0));
+	}
+
+	@Test
+	public void testPendingValueAutoApplyAndQueueLimit()
+	{
+		managerSession.startSession();
+		resolveToSelf("Player1");
+		when(config.autoApplyWhenInSession()).thenReturn(true);
+		managerSession.addPlayerToActive("Player1");
+
+		PendingValue autoApply = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 50", 50000L, "Player1");
+		managerSession.addPendingValue(autoApply);
+
+		assertTrue(requireSession(managerSession.getCurrentSession()).hasKills());
+		assertTrue(managerSession.getPendingValues().isEmpty());
+
+		when(config.autoApplyWhenInSession()).thenReturn(false);
+		for (int i = 0; i < 101; i++)
+		{
+			managerSession.addPendingValue(PendingValue.of(
+				PendingValue.Type.ADD,
+				"Clan",
+				"!add 1",
+				1L,
+				"Player1"));
+		}
+
+		assertEquals(100, managerSession.getPendingValues().size());
+		assertEquals(1L, (long) managerSession.getPendingValues().get(99).getValue());
+	}
+
+	@Test
+	public void testHistoryAndConfigEdgeCases()
+	{
+		when(config.sessionsJson()).thenReturn("{not valid json");
+		managerSession.loadFromConfig();
+
+		assertFalse(managerSession.hasActiveSession());
+		assertTrue(managerSession.getAllSessionsNewestFirst().isEmpty());
+		assertEquals("", managerSession.exportSessionJson("missing"));
+		assertEquals("", managerSession.exportSessionThreadJson("missing"));
+		assertEquals(0, managerSession.importHistorySessionsJson("   "));
+		assertEquals(0, managerSession.importHistorySessionsJson(gson.toJson(new Session[]{})));
+
+			Session root = new Session("root", Instant.EPOCH, null);
+			root.setEnd(Instant.EPOCH.plusSeconds(1));
+			Session child = new Session("child", Instant.EPOCH.plusSeconds(2), "root");
+			child.setEnd(Instant.EPOCH.plusSeconds(3));
+			Session duplicateIdRoot = new Session("root", Instant.EPOCH.plusSeconds(4), null);
+			duplicateIdRoot.setEnd(Instant.EPOCH.plusSeconds(5));
+			assertEquals(0, managerSession.importHistorySessionsJson(gson.toJson(new Session[]{root, duplicateIdRoot})));
+			assertEquals(0, managerSession.importHistorySessionsJson(gson.toJson(new Session[]{child})));
+
+		when(playerManager.getKnownMains()).thenReturn(null);
+		assertTrue(managerSession.getKnownPlayers().isEmpty());
+		assertTrue(managerSession.getNonActivePlayers().isEmpty());
+
+		when(playerManager.getKnownMains()).thenReturn(new LinkedHashSet<>(Arrays.asList("Alpha", "Beta")));
+		assertEquals(new LinkedHashSet<>(Arrays.asList("Alpha", "Beta")), managerSession.getNonActivePlayers());
+		assertFalse(managerSession.saveHistoryChanges());
+		assertFalse(managerSession.discardHistoryChanges());
+		assertEquals(Collections.emptyList(), managerSession.computeMetricsFor(null));
+		assertEquals(Collections.emptyList(), managerSession.computeMetricsFor(null, true, null));
+		assertFalse(managerSession.updateSettlementConfigSnapshotFor(null, null));
+		assertFalse(managerSession.updateSettlementConfigSnapshotFor(root, null));
+		assertNotNull(managerSession.getSettlementConfigSnapshotFor(null));
+		assertFalse(managerSession.getSettlementConfigSnapshotFor(null).isAccountForGeTax());
 	}
 }
