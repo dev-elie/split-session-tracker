@@ -19,12 +19,13 @@ import java.awt.ComponentOrientation;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridLayout;
-import java.awt.image.BufferedImage;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
+import java.awt.image.BufferedImage;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import javax.annotation.Nonnull;
 import javax.swing.AbstractCellEditor;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -37,18 +38,17 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JTable;
-import javax.swing.Scrollable;
 import javax.swing.JSplitPane;
+import javax.swing.JTable;
+import javax.swing.ListSelectionModel;
 import javax.swing.ScrollPaneConstants;
+import javax.swing.Scrollable;
 import javax.swing.SwingConstants;
 import javax.swing.Timer;
 import javax.swing.TransferHandler;
-import javax.swing.ListSelectionModel;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.TableCellEditor;
 import javax.swing.table.TableCellRenderer;
-import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.util.ImageUtil;
@@ -87,6 +87,24 @@ public class PopoutView extends PanelView
 		refreshGraph();
 	}
 
+	private static ImageIcon loadDeleteIcon()
+	{
+		BufferedImage removeImg = ImageUtil.loadImageResource(PopoutView.class, "/com/splitmanager/icons/trash-solid-full.png");
+		return new ImageIcon(ImageUtil.resizeImage(removeImg, 16, 16));
+	}
+
+	private static JButton createDeleteButton()
+	{
+		JButton button = new JButton(DELETE_ICON);
+		button.setToolTipText("Remove entry");
+		button.setOpaque(true);
+		button.setRolloverEnabled(true);
+		button.setFocusable(false);
+		SwingUtil.removeButtonDecorations(button);
+		button.setBorder(BorderFactory.createLineBorder(ColorScheme.DARK_GRAY_COLOR));
+		return button;
+	}
+
 	public void setEditMode(boolean editMode)
 	{
 		this.editMode = editMode;
@@ -97,6 +115,13 @@ public class PopoutView extends PanelView
 	protected void onPencilClicked()
 	{
 		setEditMode(true);
+	}
+
+	@Override
+	public void onMetricsRefreshed()
+	{
+		refreshGraph();
+		refreshHistoryEditor();
 	}
 
 	@Override
@@ -196,22 +221,190 @@ public class PopoutView extends PanelView
 		return panel;
 	}
 
-	private static ImageIcon loadDeleteIcon()
+	private JComponent wrapSidebar(Component[] sidebarComponents)
 	{
-		BufferedImage removeImg = ImageUtil.loadImageResource(PopoutView.class, "/com/splitmanager/icons/trash-solid-full.png");
-		return new ImageIcon(ImageUtil.resizeImage(removeImg, 16, 16));
+		JPanel sidebar = new ScrollableSidebarPanel();
+		sidebar.setLayout(new BoxLayout(sidebar, BoxLayout.Y_AXIS));
+		if (sidebarComponents != null)
+		{
+			for (Component component : sidebarComponents)
+			{
+				sidebar.add(component);
+			}
+		}
+		sidebar.add(Box.createVerticalGlue());
+		sidebar.setMinimumSize(LEFT_PANE_MINIMUM_SIZE);
+		return sidebar;
 	}
 
-	private static JButton createDeleteButton()
+	private JComponent buildGraphDashboard()
 	{
-		JButton button = new JButton(DELETE_ICON);
-		button.setToolTipText("Remove entry");
-		button.setOpaque(true);
-		button.setRolloverEnabled(true);
-		button.setFocusable(false);
-		SwingUtil.removeButtonDecorations(button);
-		button.setBorder(BorderFactory.createLineBorder(ColorScheme.DARK_GRAY_COLOR));
-		return button;
+		JPanel dashboard = new JPanel(new BorderLayout(0, 8));
+		dashboard.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 0));
+
+		JLabel title = new JLabel("Session graph");
+		title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 2.0f));
+
+		graphModeDropdown = new JComboBox<>(SessionGraphMode.values());
+		graphModeDropdown.addActionListener(e -> refreshGraph());
+		showSleepingPlayersToggle = new JCheckBox("Show sleeping players", true);
+		showSleepingPlayersToggle.addActionListener(e -> refreshGraph());
+
+		JPanel header = new JPanel(new BorderLayout(8, 2));
+		header.add(title, BorderLayout.WEST);
+		JPanel controls = new JPanel(new GridLayout(1, 2, 8, 0));
+		controls.add(showSleepingPlayersToggle);
+		controls.add(graphModeDropdown);
+		header.add(controls, BorderLayout.EAST);
+
+		graphDescriptionLabel = new JLabel(" ");
+		JPanel top = new JPanel(new BorderLayout(0, 4));
+		top.add(header, BorderLayout.NORTH);
+		top.add(graphDescriptionLabel, BorderLayout.SOUTH);
+		dashboard.add(top, BorderLayout.NORTH);
+
+		graphPanel = new SessionGraphPanel();
+		dashboard.add(graphPanel, BorderLayout.CENTER);
+
+		JPanel stats = new JPanel(new GridLayout(1, 3, 8, 0));
+		totalLootValue = new JLabel("-", SwingConstants.CENTER);
+		gpPerHourValue = new JLabel("-", SwingConstants.CENTER);
+		topPlayerValue = new JLabel("-", SwingConstants.CENTER);
+		stats.add(statPanel("Total loot", totalLootValue));
+		stats.add(statPanel("GP/hr", gpPerHourValue));
+		stats.add(statPanel("Top earner", topPlayerValue));
+		dashboard.add(stats, BorderLayout.SOUTH);
+
+		return dashboard;
+	}
+
+	private JPanel statPanel(String title, JLabel valueLabel)
+	{
+		JLabel titleLabel = new JLabel(title, SwingConstants.CENTER);
+		titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD));
+		valueLabel.setFont(valueLabel.getFont().deriveFont(Font.BOLD));
+
+		JPanel panel = new JPanel(new GridLayout(2, 1, 0, 2));
+		panel.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createEtchedBorder(),
+			BorderFactory.createEmptyBorder(6, 6, 6, 6)));
+		panel.add(titleLabel);
+		panel.add(valueLabel);
+		return panel;
+	}
+
+	private void refreshHistoryEditor()
+	{
+		if (editContainer == null)
+		{
+			return;
+		}
+		for (Component c : editContainer.getComponents())
+		{
+			if (c instanceof JScrollPane)
+			{
+				JScrollPane scroll = (JScrollPane) c;
+				if (scroll.getViewport().getView() instanceof JTable)
+				{
+					JTable table = (JTable) scroll.getViewport().getView();
+					if (table.getModel() instanceof HistoryTableModel)
+					{
+						((HistoryTableModel) table.getModel()).refresh();
+					}
+				}
+			}
+		}
+	}
+
+	private void refreshGraph()
+	{
+		if (graphPanel == null || graphModeDropdown == null)
+		{
+			return;
+		}
+
+		SessionGraphMode mode = (SessionGraphMode) graphModeDropdown.getSelectedItem();
+		if (mode == null)
+		{
+			mode = SessionGraphMode.GP_PER_HOUR;
+		}
+
+		Session currentSession = getSessionManager().isHistoryLoaded()
+			? getSessionManager().getCurrentEditableSession().orElse(getSessionManager().getCurrentSession().orElse(null))
+			: getSessionManager().getCurrentSession().orElse(null);
+		List<Kill> kills = currentSession == null ? List.of() : getSessionManager().getAllKills();
+		List<PlayerMetrics> metrics = currentSession == null
+			? List.of()
+			: getSessionManager().computeMetricsFor(currentSession, shouldShowSleepingPlayersInGraph());
+		SessionGraphSnapshot snapshot = SessionGraphData.build(
+			currentSession,
+			getSessionManager().getAllSessionsNewestFirst(),
+			kills,
+			metrics,
+			mode,
+			Instant.now());
+
+		graphPanel.setSnapshot(snapshot);
+		graphDescriptionLabel.setText(mode.getDescription());
+		totalLootValue.setText(formatAmount(snapshot.getTotalLoot()));
+		gpPerHourValue.setText(formatAmount(snapshot.getGpPerHour()) + "/h");
+		topPlayerValue.setText(snapshot.getTopPlayer().isBlank()
+			? "-"
+			: snapshot.getTopPlayer() + " (" + formatAmount(snapshot.getTopPlayerTotal()) + ")");
+	}
+
+	private String formatAmount(long amount)
+	{
+		long abs = Math.abs(amount);
+		if (abs >= 1_000_000_000L)
+		{
+			return Formats.OsrsAmountFormatter.toSuffixString(amount, 'b');
+		}
+		if (abs >= 1_000_000L)
+		{
+			return Formats.OsrsAmountFormatter.toSuffixString(amount, 'm');
+		}
+		return Formats.OsrsAmountFormatter.toSuffixString(amount, 'k');
+	}
+
+	private boolean shouldShowSleepingPlayersInGraph()
+	{
+		return showSleepingPlayersToggle == null || showSleepingPlayersToggle.isSelected();
+	}
+
+	private static class ScrollableSidebarPanel extends JPanel implements Scrollable
+	{
+		private static final long serialVersionUID = 1L;
+
+		@Override
+		public Dimension getPreferredScrollableViewportSize()
+		{
+			return LEFT_PANE_PREFERRED_SIZE;
+		}
+
+		@Override
+		public int getScrollableUnitIncrement(java.awt.Rectangle visibleRect, int orientation, int direction)
+		{
+			return 16;
+		}
+
+		@Override
+		public int getScrollableBlockIncrement(java.awt.Rectangle visibleRect, int orientation, int direction)
+		{
+			return Math.max(16, visibleRect.height - 32);
+		}
+
+		@Override
+		public boolean getScrollableTracksViewportWidth()
+		{
+			return true;
+		}
+
+		@Override
+		public boolean getScrollableTracksViewportHeight()
+		{
+			return false;
+		}
 	}
 
 	private class HistoryTableModel extends AbstractTableModel
@@ -219,8 +412,8 @@ public class PopoutView extends PanelView
 		private static final long serialVersionUID = 1L;
 
 		private static final int DELETE_COLUMN = 4;
-		private List<Kill> kills = new ArrayList<>();
 		private final String[] columns = {"Time", "Player", "Amount", "Type", "X"};
+		private List<Kill> kills = new ArrayList<>();
 		private int pendingRosterDeleteRow = -1;
 		private int pendingRosterDeleteLinkedRow = -1;
 
@@ -340,12 +533,6 @@ public class PopoutView extends PanelView
 		}
 
 		@Override
-		public String getColumnName(int column)
-		{
-			return columns[column];
-		}
-
-		@Override
 		public Object getValueAt(int rowIndex, int columnIndex)
 		{
 			Kill k = kills.get(rowIndex);
@@ -363,6 +550,12 @@ public class PopoutView extends PanelView
 					return DELETE_ICON;
 			}
 			return null;
+		}
+
+		@Override
+		public String getColumnName(int column)
+		{
+			return columns[column];
 		}
 
 		@Override
@@ -521,199 +714,6 @@ public class PopoutView extends PanelView
 		}
 	}
 
-	private JComponent wrapSidebar(Component[] sidebarComponents)
-	{
-		JPanel sidebar = new ScrollableSidebarPanel();
-		sidebar.setLayout(new BoxLayout(sidebar, BoxLayout.Y_AXIS));
-		if (sidebarComponents != null)
-		{
-			for (Component component : sidebarComponents)
-			{
-				sidebar.add(component);
-			}
-		}
-		sidebar.add(Box.createVerticalGlue());
-		sidebar.setMinimumSize(LEFT_PANE_MINIMUM_SIZE);
-		return sidebar;
-	}
-
-	private static class ScrollableSidebarPanel extends JPanel implements Scrollable
-	{
-		private static final long serialVersionUID = 1L;
-
-		@Override
-		public Dimension getPreferredScrollableViewportSize()
-		{
-			return LEFT_PANE_PREFERRED_SIZE;
-		}
-
-		@Override
-		public int getScrollableUnitIncrement(java.awt.Rectangle visibleRect, int orientation, int direction)
-		{
-			return 16;
-		}
-
-		@Override
-		public int getScrollableBlockIncrement(java.awt.Rectangle visibleRect, int orientation, int direction)
-		{
-			return Math.max(16, visibleRect.height - 32);
-		}
-
-		@Override
-		public boolean getScrollableTracksViewportWidth()
-		{
-			return true;
-		}
-
-		@Override
-		public boolean getScrollableTracksViewportHeight()
-		{
-			return false;
-		}
-	}
-
-	private JComponent buildGraphDashboard()
-	{
-		JPanel dashboard = new JPanel(new BorderLayout(0, 8));
-		dashboard.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 0));
-
-		JLabel title = new JLabel("Session graph");
-		title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 2.0f));
-
-		graphModeDropdown = new JComboBox<>(SessionGraphMode.values());
-		graphModeDropdown.addActionListener(e -> refreshGraph());
-		showSleepingPlayersToggle = new JCheckBox("Show sleeping players", true);
-		showSleepingPlayersToggle.addActionListener(e -> refreshGraph());
-
-		JPanel header = new JPanel(new BorderLayout(8, 2));
-		header.add(title, BorderLayout.WEST);
-		JPanel controls = new JPanel(new GridLayout(1, 2, 8, 0));
-		controls.add(showSleepingPlayersToggle);
-		controls.add(graphModeDropdown);
-		header.add(controls, BorderLayout.EAST);
-
-		graphDescriptionLabel = new JLabel(" ");
-		JPanel top = new JPanel(new BorderLayout(0, 4));
-		top.add(header, BorderLayout.NORTH);
-		top.add(graphDescriptionLabel, BorderLayout.SOUTH);
-		dashboard.add(top, BorderLayout.NORTH);
-
-		graphPanel = new SessionGraphPanel();
-		dashboard.add(graphPanel, BorderLayout.CENTER);
-
-		JPanel stats = new JPanel(new GridLayout(1, 3, 8, 0));
-		totalLootValue = new JLabel("-", SwingConstants.CENTER);
-		gpPerHourValue = new JLabel("-", SwingConstants.CENTER);
-		topPlayerValue = new JLabel("-", SwingConstants.CENTER);
-		stats.add(statPanel("Total loot", totalLootValue));
-		stats.add(statPanel("GP/hr", gpPerHourValue));
-		stats.add(statPanel("Top earner", topPlayerValue));
-		dashboard.add(stats, BorderLayout.SOUTH);
-
-		return dashboard;
-	}
-
-	private JPanel statPanel(String title, JLabel valueLabel)
-	{
-		JLabel titleLabel = new JLabel(title, SwingConstants.CENTER);
-		titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD));
-		valueLabel.setFont(valueLabel.getFont().deriveFont(Font.BOLD));
-
-		JPanel panel = new JPanel(new GridLayout(2, 1, 0, 2));
-		panel.setBorder(BorderFactory.createCompoundBorder(
-			BorderFactory.createEtchedBorder(),
-			BorderFactory.createEmptyBorder(6, 6, 6, 6)));
-		panel.add(titleLabel);
-		panel.add(valueLabel);
-		return panel;
-	}
-
-	@Override
-	public void onMetricsRefreshed()
-	{
-		refreshGraph();
-		refreshHistoryEditor();
-	}
-
-	private void refreshHistoryEditor()
-	{
-		if (editContainer == null)
-		{
-			return;
-		}
-		for (Component c : editContainer.getComponents())
-		{
-			if (c instanceof JScrollPane)
-			{
-				JScrollPane scroll = (JScrollPane) c;
-				if (scroll.getViewport().getView() instanceof JTable)
-				{
-					JTable table = (JTable) scroll.getViewport().getView();
-					if (table.getModel() instanceof HistoryTableModel)
-					{
-						((HistoryTableModel) table.getModel()).refresh();
-					}
-				}
-			}
-		}
-	}
-
-	private void refreshGraph()
-	{
-		if (graphPanel == null || graphModeDropdown == null)
-		{
-			return;
-		}
-
-		SessionGraphMode mode = (SessionGraphMode) graphModeDropdown.getSelectedItem();
-		if (mode == null)
-		{
-			mode = SessionGraphMode.GP_PER_HOUR;
-		}
-
-		Session currentSession = getSessionManager().isHistoryLoaded()
-			? getSessionManager().getCurrentEditableSession().orElse(getSessionManager().getCurrentSession().orElse(null))
-			: getSessionManager().getCurrentSession().orElse(null);
-		List<Kill> kills = currentSession == null ? List.of() : getSessionManager().getAllKills();
-		List<PlayerMetrics> metrics = currentSession == null
-			? List.of()
-			: getSessionManager().computeMetricsFor(currentSession, shouldShowSleepingPlayersInGraph());
-		SessionGraphSnapshot snapshot = SessionGraphData.build(
-			currentSession,
-			getSessionManager().getAllSessionsNewestFirst(),
-			kills,
-			metrics,
-			mode,
-			Instant.now());
-
-		graphPanel.setSnapshot(snapshot);
-		graphDescriptionLabel.setText(mode.getDescription());
-		totalLootValue.setText(formatAmount(snapshot.getTotalLoot()));
-		gpPerHourValue.setText(formatAmount(snapshot.getGpPerHour()) + "/h");
-		topPlayerValue.setText(snapshot.getTopPlayer().isBlank()
-			? "-"
-			: snapshot.getTopPlayer() + " (" + formatAmount(snapshot.getTopPlayerTotal()) + ")");
-	}
-
-	private String formatAmount(long amount)
-	{
-		long abs = Math.abs(amount);
-		if (abs >= 1_000_000_000L)
-		{
-			return Formats.OsrsAmountFormatter.toSuffixString(amount, 'b');
-		}
-		if (abs >= 1_000_000L)
-		{
-			return Formats.OsrsAmountFormatter.toSuffixString(amount, 'm');
-		}
-		return Formats.OsrsAmountFormatter.toSuffixString(amount, 'k');
-	}
-
-	private boolean shouldShowSleepingPlayersInGraph()
-	{
-		return showSleepingPlayersToggle == null || showSleepingPlayersToggle.isSelected();
-	}
-
 	private class HistoryTransferHandler extends TransferHandler
 	{
 		private static final long serialVersionUID = 1L;
@@ -723,47 +723,6 @@ public class PopoutView extends PanelView
 		HistoryTransferHandler(HistoryTableModel model)
 		{
 			this.model = model;
-		}
-
-		@Override
-		public int getSourceActions(JComponent c)
-		{
-			return MOVE;
-		}
-
-		@Override
-		protected Transferable createTransferable(JComponent c)
-		{
-			JTable table = (JTable) c;
-			int selectedRow = table.getSelectedRow();
-			int index = selectedRow < 0 ? -1 : table.convertRowIndexToModel(selectedRow);
-			return new Transferable()
-			{
-				@Override
-				public DataFlavor[] getTransferDataFlavors()
-				{
-					return new DataFlavor[]{DataFlavor.stringFlavor};
-				}
-
-				@Override
-				public boolean isDataFlavorSupported(DataFlavor flavor)
-				{
-					return DataFlavor.stringFlavor.equals(flavor);
-				}
-
-				@Override
-				@Nonnull
-				public Object getTransferData(DataFlavor flavor)
-				{
-					return String.valueOf(index);
-				}
-			};
-		}
-
-		@Override
-		public boolean canImport(TransferSupport support)
-		{
-			return support.isDataFlavorSupported(DataFlavor.stringFlavor);
 		}
 
 		@Override
@@ -805,6 +764,47 @@ public class PopoutView extends PanelView
 				log.warn("Failed to move history row", e);
 				return false;
 			}
+		}
+
+		@Override
+		public boolean canImport(TransferSupport support)
+		{
+			return support.isDataFlavorSupported(DataFlavor.stringFlavor);
+		}
+
+		@Override
+		public int getSourceActions(JComponent c)
+		{
+			return MOVE;
+		}
+
+		@Override
+		protected Transferable createTransferable(JComponent c)
+		{
+			JTable table = (JTable) c;
+			int selectedRow = table.getSelectedRow();
+			int index = selectedRow < 0 ? -1 : table.convertRowIndexToModel(selectedRow);
+			return new Transferable()
+			{
+				@Override
+				public DataFlavor[] getTransferDataFlavors()
+				{
+					return new DataFlavor[]{DataFlavor.stringFlavor};
+				}
+
+				@Override
+				public boolean isDataFlavorSupported(DataFlavor flavor)
+				{
+					return DataFlavor.stringFlavor.equals(flavor);
+				}
+
+				@Override
+				@Nonnull
+				public Object getTransferData(DataFlavor flavor)
+				{
+					return String.valueOf(index);
+				}
+			};
 		}
 	}
 }

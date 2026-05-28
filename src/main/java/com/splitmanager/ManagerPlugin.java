@@ -376,12 +376,10 @@ public class ManagerPlugin extends Plugin
 		if (isFriendsChatOn())
 		{
 			chatOverlay.setVisible(false);
-			chatOverlay.setChatchanOn(true);
 			return;
 		}
 
 		chatOverlay.setVisible(true);
-		chatOverlay.setChatchanOn(false);
 	}
 
 
@@ -397,15 +395,11 @@ public class ManagerPlugin extends Plugin
 		int componentId = event.getActionParam1();
 		int groupId = WidgetUtil.componentToInterface(componentId);
 
-		Session currentSession = null;
 		if (sessionManager == null)
 		{
 			return;
 		}
-		else
-		{
-			currentSession = sessionManager.getCurrentSession().orElse(null);
-		}
+		Session currentSession = sessionManager.getCurrentSession().orElse(null);
 		if (!(groupId == InterfaceID.FRIENDS || groupId == InterfaceID.CHATCHANNEL_CURRENT
 			|| componentId == InterfaceID.ClansSidepanel.PLAYERLIST || componentId == InterfaceID.ClansGuestSidepanel.PLAYERLIST))
 		{

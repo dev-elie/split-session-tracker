@@ -16,6 +16,7 @@ import java.util.Set;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import org.junit.Before;
@@ -41,7 +42,7 @@ public class ManagerSessionTest
 	@Mock
 	private ManagerPlugin pluginManager;
 
-	private Gson gson = new Gson().newBuilder()
+	private final Gson gson = new Gson().newBuilder()
 		.registerTypeAdapter(Instant.class, new InstantTypeAdapter())
 		.create();
 
@@ -61,12 +62,26 @@ public class ManagerSessionTest
 		}
 	}
 
+	private Session requireSession(Optional<Session> session)
+	{
+		assertTrue(session.isPresent());
+		return session.orElseThrow(() -> new AssertionError("Expected session to be present"));
+	}
+
+	private PlayerMetrics requireMetric(List<PlayerMetrics> metrics, String player)
+	{
+		return metrics.stream()
+			.filter(metric -> player.equals(metric.player))
+			.findFirst()
+			.orElseThrow(() -> new AssertionError("Missing metric for " + player));
+	}
+
 	@Test
 	public void testStartSession()
 	{
 		Optional<Session> sessionOpt = managerSession.startSession();
 		assertTrue(sessionOpt.isPresent());
-		Session child = sessionOpt.get();
+		Session child = requireSession(sessionOpt);
 		assertNotNull(child.getMotherId());
 		assertTrue(managerSession.hasActiveSession());
 		verify(config, atLeastOnce()).sessionsJson(anyString());
@@ -131,8 +146,8 @@ public class ManagerSessionTest
 		assertTrue(imported.getCurrentSession().isEmpty());
 
 		Session importedRoot = imported.getHistorySessionsNewestFirst().get(0);
-		assertTrue(importedRoot.getMotherId() == null);
-		assertTrue(!sourceRoot.getId().equals(importedRoot.getId()));
+		assertNull(importedRoot.getMotherId());
+		assertFalse(sourceRoot.getId().equals(importedRoot.getId()));
 		assertFalse(importedRoot.isActive());
 
 		Session importedChild = imported.getAllSessionsNewestFirst().stream()
@@ -208,7 +223,7 @@ public class ManagerSessionTest
 		assertTrue(applied);
 		assertEquals(0, managerSession.getPendingValues().size());
 		// Verify kill was added (implicitly via session state)
-		assertTrue(managerSession.getCurrentSession().get().hasKills());
+		assertTrue(requireSession(managerSession.getCurrentSession()).hasKills());
 	}
 
 	@Test
@@ -226,7 +241,7 @@ public class ManagerSessionTest
 		managerSession.addPlayerToActive(p2);
 
 		// Get the LATEST session from managerSession after additions
-		Session child = managerSession.getCurrentSession().get();
+		Session child = requireSession(managerSession.getCurrentSession());
 
 		// p1 gets a 100k drop
 		PendingValue pv = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 100", 100000L, p1);
@@ -240,14 +255,14 @@ public class ManagerSessionTest
 		// Basic split check: 100k total, 2 players -> 50k each.
 		// p1: 100k total, -50k split (50k - 100k)
 		// p2: 0 total, +50k split (50k - 0)
-		PlayerMetrics m1 = metrics.stream().filter(m -> m.player.equals(p1)).findFirst().get();
-		PlayerMetrics m2 = metrics.stream().filter(m -> m.player.equals(p2)).findFirst().get();
+		PlayerMetrics m1 = requireMetric(metrics, p1);
+		PlayerMetrics m2 = requireMetric(metrics, p2);
 
-		assertEquals(100000L, (long) m1.total);
-		assertEquals(-50000L, (long) m1.split);
+		assertEquals(100000L, m1.total);
+		assertEquals(-50000L, m1.split);
 
-		assertEquals(0L, (long) m2.total);
-		assertEquals(50000L, (long) m2.split);
+		assertEquals(0L, m2.total);
+		assertEquals(50000L, m2.split);
 	}
 
 	@Test
@@ -267,20 +282,20 @@ public class ManagerSessionTest
 		managerSession.addPlayerToActive(p1);
 		managerSession.addPlayerToActive(p2);
 
-		Session child = managerSession.getCurrentSession().get();
+		Session child = requireSession(managerSession.getCurrentSession());
 
 		PendingValue pv = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 100m", 100000000L, p1);
 		managerSession.addPendingValue(pv);
 		managerSession.applyPendingValueToPlayer(pv.getId(), p1);
 
 		List<PlayerMetrics> metrics = managerSession.computeMetricsFor(child);
-		PlayerMetrics m1 = metrics.stream().filter(m -> m.player.equals(p1)).findFirst().get();
-		PlayerMetrics m2 = metrics.stream().filter(m -> m.player.equals(p2)).findFirst().get();
+		PlayerMetrics m1 = requireMetric(metrics, p1);
+		PlayerMetrics m2 = requireMetric(metrics, p2);
 
-		assertEquals(98000000L, (long) m1.total);
-		assertEquals(-49000000L, (long) m1.split);
-		assertEquals(0L, (long) m2.total);
-		assertEquals(49000000L, (long) m2.split);
+		assertEquals(98000000L, m1.total);
+		assertEquals(-49000000L, m1.split);
+		assertEquals(0L, m2.total);
+		assertEquals(49000000L, m2.split);
 	}
 
 	@Test
@@ -300,19 +315,19 @@ public class ManagerSessionTest
 
 		managerSession.addPlayerToActive(p1);
 		managerSession.addPlayerToActive(p2);
-		Session child = managerSession.getCurrentSession().get();
+		Session child = requireSession(managerSession.getCurrentSession());
 
 		PendingValue pv = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 1b", 1000000000L, p1);
 		managerSession.addPendingValue(pv);
 		managerSession.applyPendingValueToPlayer(pv.getId(), p1);
 
 		List<PlayerMetrics> metrics = managerSession.computeMetricsFor(child);
-		PlayerMetrics m1 = metrics.stream().filter(m -> m.player.equals(p1)).findFirst().get();
-		PlayerMetrics m2 = metrics.stream().filter(m -> m.player.equals(p2)).findFirst().get();
+		PlayerMetrics m1 = requireMetric(metrics, p1);
+		PlayerMetrics m2 = requireMetric(metrics, p2);
 
-		assertEquals(995000000L, (long) m1.total);
-		assertEquals(-497500000L, (long) m1.split);
-		assertEquals(497500000L, (long) m2.split);
+		assertEquals(995000000L, m1.total);
+		assertEquals(-497500000L, m1.split);
+		assertEquals(497500000L, m2.split);
 	}
 
 	@Test
@@ -332,19 +347,19 @@ public class ManagerSessionTest
 
 		managerSession.addPlayerToActive(p1);
 		managerSession.addPlayerToActive(p2);
-		Session child = managerSession.getCurrentSession().get();
+		Session child = requireSession(managerSession.getCurrentSession());
 
 		PendingValue pv = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 100m", 100000000L, p1);
 		managerSession.addPendingValue(pv);
 		managerSession.applyPendingValueToPlayer(pv.getId(), p1);
 
 		List<PlayerMetrics> metrics = managerSession.computeMetricsFor(child);
-		PlayerMetrics m1 = metrics.stream().filter(m -> m.player.equals(p1)).findFirst().get();
-		PlayerMetrics m2 = metrics.stream().filter(m -> m.player.equals(p2)).findFirst().get();
+		PlayerMetrics m1 = requireMetric(metrics, p1);
+		PlayerMetrics m2 = requireMetric(metrics, p2);
 
-		assertEquals(98000000L, (long) m1.total);
-		assertEquals(-49000000L, (long) m1.split);
-		assertEquals(49000000L, (long) m2.split);
+		assertEquals(98000000L, m1.total);
+		assertEquals(-49000000L, m1.split);
+		assertEquals(49000000L, m2.split);
 	}
 
 	@Test
@@ -364,19 +379,19 @@ public class ManagerSessionTest
 
 		managerSession.addPlayerToActive(p1);
 		managerSession.addPlayerToActive(p2);
-		Session child = managerSession.getCurrentSession().get();
+		Session child = requireSession(managerSession.getCurrentSession());
 
 		PendingValue pv = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 1b", 1000000000L, p1);
 		managerSession.addPendingValue(pv);
 		managerSession.applyPendingValueToPlayer(pv.getId(), p1);
 
 		List<PlayerMetrics> metrics = managerSession.computeMetricsFor(child);
-		PlayerMetrics m1 = metrics.stream().filter(m -> m.player.equals(p1)).findFirst().get();
-		PlayerMetrics m2 = metrics.stream().filter(m -> m.player.equals(p2)).findFirst().get();
+		PlayerMetrics m1 = requireMetric(metrics, p1);
+		PlayerMetrics m2 = requireMetric(metrics, p2);
 
-		assertEquals(990000000L, (long) m1.total);
-		assertEquals(-495000000L, (long) m1.split);
-		assertEquals(495000000L, (long) m2.split);
+		assertEquals(990000000L, m1.total);
+		assertEquals(-495000000L, m1.split);
+		assertEquals(495000000L, m2.split);
 	}
 
 	@Test
@@ -405,12 +420,12 @@ public class ManagerSessionTest
 		lenient().when(config.geTaxMaxPerLoot()).thenReturn("10m");
 
 		List<PlayerMetrics> metrics = managerSession.computeMetricsFor(historyRoot, true);
-		PlayerMetrics m1 = metrics.stream().filter(m -> m.player.equals("Player1")).findFirst().get();
-		PlayerMetrics m2 = metrics.stream().filter(m -> m.player.equals("Player2")).findFirst().get();
+		PlayerMetrics m1 = requireMetric(metrics, "Player1");
+		PlayerMetrics m2 = requireMetric(metrics, "Player2");
 
-		assertEquals(98000000L, (long) m1.total);
-		assertEquals(-49000000L, (long) m1.split);
-		assertEquals(49000000L, (long) m2.split);
+		assertEquals(98000000L, m1.total);
+		assertEquals(-49000000L, m1.split);
+		assertEquals(49000000L, m2.split);
 	}
 
 	@Test
@@ -436,12 +451,12 @@ public class ManagerSessionTest
 			new com.splitmanager.models.SettlementConfigSnapshot(true, "15m", 10.0d, "10m")));
 
 		List<PlayerMetrics> metrics = managerSession.computeMetricsFor(historyRoot, true);
-		PlayerMetrics m1 = metrics.stream().filter(m -> m.player.equals("Player1")).findFirst().get();
-		PlayerMetrics m2 = metrics.stream().filter(m -> m.player.equals("Player2")).findFirst().get();
+		PlayerMetrics m1 = requireMetric(metrics, "Player1");
+		PlayerMetrics m2 = requireMetric(metrics, "Player2");
 
-		assertEquals(90000000L, (long) m1.total);
-		assertEquals(-45000000L, (long) m1.split);
-		assertEquals(45000000L, (long) m2.split);
+		assertEquals(90000000L, m1.total);
+		assertEquals(-45000000L, m1.split);
+		assertEquals(45000000L, m2.split);
 	}
 
 	@Test
@@ -492,7 +507,7 @@ public class ManagerSessionTest
 		assertTrue(managerSession.isHistoryDirty());
 
 		assertTrue(managerSession.discardHistoryChanges());
-		Session restoredRoot = managerSession.getCurrentSession().get();
+		Session restoredRoot = requireSession(managerSession.getCurrentSession());
 
 		assertFalse(managerSession.isHistoryDirty());
 		assertEquals(2.0d, restoredRoot.getSettlementConfigAtEnd().getGeTaxPercent(), 0.0d);
@@ -518,7 +533,7 @@ public class ManagerSessionTest
 		assertTrue(managerSession.addKill("Player2", 100000L));
 		assertTrue(managerSession.isHistoryDirty());
 
-		Session editable = managerSession.getCurrentEditableSession().get();
+		Session editable = requireSession(managerSession.getCurrentEditableSession());
 		assertTrue(editable.getPlayers().contains("Player2"));
 		assertTrue(managerSession.getAllKills().stream()
 			.anyMatch(kill -> "Player2".equals(kill.getPlayer()) && Long.valueOf(100000L).equals(kill.getAmount())));
@@ -563,7 +578,7 @@ public class ManagerSessionTest
 		managerSession.applyPendingValueToPlayer(pv3.getId(), p3);
 
 		// Current session is Segment 3 (P2, P3 active)
-		Session current = managerSession.getCurrentSession().get();
+		Session current = requireSession(managerSession.getCurrentSession());
 		assertEquals(2, current.getPlayers().size());
 
 		// Test with includeNonActivePlayers = true (what the UI uses)
@@ -575,20 +590,20 @@ public class ManagerSessionTest
 		// P3 Total: 60k, Split: +70k
 		assertEquals(3, metrics.size());
 
-		PlayerMetrics m1 = metrics.stream().filter(m -> m.player.equals(p1)).findFirst().get();
-		PlayerMetrics m2 = metrics.stream().filter(m -> m.player.equals(p2)).findFirst().get();
-		PlayerMetrics m3 = metrics.stream().filter(m -> m.player.equals(p3)).findFirst().get();
+		PlayerMetrics m1 = requireMetric(metrics, p1);
+		PlayerMetrics m2 = requireMetric(metrics, p2);
+		PlayerMetrics m3 = requireMetric(metrics, p3);
 
-		assertEquals(100000L, (long) m1.total);
-		assertEquals(50000L, (long) m1.split);
+		assertEquals(100000L, m1.total);
+		assertEquals(50000L, m1.split);
 		assertFalse(m1.activePlayer);
 
-		assertEquals(300000L, (long) m2.total);
-		assertEquals(-120000L, (long) m2.split);
+		assertEquals(300000L, m2.total);
+		assertEquals(-120000L, m2.split);
 		assertTrue(m2.activePlayer);
 
-		assertEquals(60000L, (long) m3.total);
-		assertEquals(70000L, (long) m3.split);
+		assertEquals(60000L, m3.total);
+		assertEquals(70000L, m3.split);
 		assertTrue(m3.activePlayer);
 
 		// Test with includeNonActivePlayers = false (only active roster)
@@ -605,29 +620,29 @@ public class ManagerSessionTest
 		managerSession.applyPendingValueToPlayer(pv4.getId(), p1);
 
 		// Current is Segment 4 (P1, P2, P3 active)
-		Session finalSession = managerSession.getCurrentSession().get();
+		Session finalSession = requireSession(managerSession.getCurrentSession());
 		assertEquals(3, finalSession.getPlayers().size());
 
 		List<PlayerMetrics> finalMetrics = managerSession.computeMetricsFor(finalSession, true);
 		assertEquals(3, finalMetrics.size());
 
-		PlayerMetrics fm1 = finalMetrics.stream().filter(m -> m.player.equals(p1)).findFirst().get();
-		PlayerMetrics fm2 = finalMetrics.stream().filter(m -> m.player.equals(p2)).findFirst().get();
-		PlayerMetrics fm3 = finalMetrics.stream().filter(m -> m.player.equals(p3)).findFirst().get();
+		PlayerMetrics fm1 = requireMetric(finalMetrics, p1);
+		PlayerMetrics fm2 = requireMetric(finalMetrics, p2);
+		PlayerMetrics fm3 = requireMetric(finalMetrics, p3);
 
 		// P1: Total 400k, Split -150k
-		assertEquals(400000L, (long) fm1.total);
-		assertEquals(-150000L, (long) fm1.split);
+		assertEquals(400000L, fm1.total);
+		assertEquals(-150000L, fm1.split);
 		assertTrue(fm1.activePlayer);
 
 		// P2: Total 300k, Split -20k
-		assertEquals(300000L, (long) fm2.total);
-		assertEquals(-20000L, (long) fm2.split);
+		assertEquals(300000L, fm2.total);
+		assertEquals(-20000L, fm2.split);
 		assertTrue(fm2.activePlayer);
 
 		// P3: Total 60k, Split +170k
-		assertEquals(60000L, (long) fm3.total);
-		assertEquals(170000L, (long) fm3.split);
+		assertEquals(60000L, fm3.total);
+		assertEquals(170000L, fm3.split);
 		assertTrue(fm3.activePlayer);
 	}
 
@@ -704,7 +719,7 @@ public class ManagerSessionTest
 		Optional<Session> loaded = managerSession.loadHistory("archived");
 		assertTrue(loaded.isPresent());
 		assertTrue(managerSession.isHistoryLoaded());
-		assertEquals("archived", managerSession.getCurrentSession().get().getId());
+		assertEquals("archived", requireSession(managerSession.getCurrentSession()).getId());
 		assertFalse(managerSession.startSession().isPresent());
 
 		managerSession.unloadHistory();
@@ -720,13 +735,13 @@ public class ManagerSessionTest
 
 		assertTrue(managerSession.addPlayerToActive("AltPlayer"));
 
-		Session current = managerSession.getCurrentSession().get();
+		Session current = requireSession(managerSession.getCurrentSession());
 		assertTrue(current.getPlayers().contains("MainPlayer"));
 		assertFalse(current.getPlayers().contains("AltPlayer"));
 		assertTrue(managerSession.currentSessionHasPlayer("AltPlayer"));
 
 		assertTrue(managerSession.removePlayerFromSession("AltPlayer"));
-		assertFalse(managerSession.getCurrentSession().get().getPlayers().contains("MainPlayer"));
+		assertFalse(requireSession(managerSession.getCurrentSession()).getPlayers().contains("MainPlayer"));
 	}
 
 	@Test
@@ -760,7 +775,7 @@ public class ManagerSessionTest
 		managerSession.addPendingValue(pv);
 
 		assertTrue(managerSession.getPendingValues().isEmpty());
-		assertTrue(managerSession.getCurrentSession().get().getKills().stream()
+		assertTrue(requireSession(managerSession.getCurrentSession()).getKills().stream()
 			.anyMatch(k -> p1.equals(k.getPlayer()) && Long.valueOf(50000L).equals(k.getAmount())));
 	}
 
@@ -785,7 +800,7 @@ public class ManagerSessionTest
 	{
 		assertFalse(managerSession.sessionHasPlayer(null, null));
 		managerSession.startSession();
-		assertFalse(managerSession.sessionHasPlayer(null, managerSession.getCurrentSession().get()));
+		assertFalse(managerSession.sessionHasPlayer(null, requireSession(managerSession.getCurrentSession())));
 	}
 
 	@Test
@@ -823,7 +838,7 @@ public class ManagerSessionTest
 			assertTrue(true);
 		}
 
-		String currentId = managerSession.getCurrentSession().get().getId();
+		String currentId = requireSession(managerSession.getCurrentSession()).getId();
 		when(config.sessionsJson()).thenReturn(gson.toJson(managerSession.getAllSessionsNewestFirst()));
 		when(config.currentSessionId()).thenReturn(currentId);
 
@@ -926,7 +941,7 @@ public class ManagerSessionTest
 		managerSession.addPlayerToActive(p2);
 		managerSession.addKill(p1, 100000L);
 		assertTrue(managerSession.removePlayerFromSession(p2));
-		assertFalse(managerSession.getCurrentSession().get().getPlayers().contains(p2));
+		assertFalse(requireSession(managerSession.getCurrentSession()).getPlayers().contains(p2));
 
 		List<Kill> kills = managerSession.getAllKills();
 		int leftIndex = -1;
@@ -942,8 +957,8 @@ public class ManagerSessionTest
 
 		managerSession.removeKillAt(leftIndex);
 
-		assertTrue(managerSession.getCurrentSession().get().getPlayers().contains(p2));
-		List<PlayerMetrics> metrics = managerSession.computeMetricsFor(managerSession.getCurrentSession().get(), true);
+		assertTrue(requireSession(managerSession.getCurrentSession()).getPlayers().contains(p2));
+		List<PlayerMetrics> metrics = managerSession.computeMetricsFor(requireSession(managerSession.getCurrentSession()), true);
 		assertTrue(metrics.stream().anyMatch(m -> p2.equals(m.player) && m.activePlayer));
 	}
 
@@ -958,7 +973,7 @@ public class ManagerSessionTest
 		when(playerManager.getKnownPlayers()).thenReturn(new LinkedHashSet<>(Arrays.asList(active, "Unused")));
 		managerSession.addPlayerToActive(active);
 
-		List<PlayerMetrics> metrics = managerSession.computeMetricsFor(managerSession.getCurrentSession().get(), true);
+		List<PlayerMetrics> metrics = managerSession.computeMetricsFor(requireSession(managerSession.getCurrentSession()), true);
 
 		assertTrue(metrics.stream().anyMatch(m -> active.equals(m.player) && m.activePlayer));
 		assertFalse(metrics.stream().anyMatch(m -> "Unused".equals(m.player)));

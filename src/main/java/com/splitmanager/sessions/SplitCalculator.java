@@ -119,11 +119,13 @@ public class SplitCalculator
 			long playerTotalThisSession = entry.getValue();
 			if (totals.containsKey(player))
 			{
-				totals.compute(player, (ignored, value) -> value + playerTotalThisSession);
+				Long currentTotal = totals.get(player);
+				totals.put(player, (currentTotal == null ? 0L : currentTotal) + playerTotalThisSession);
 			}
 			if (splits.containsKey(player))
 			{
-				splits.compute(player, (ignored, value) -> value + sessionAverage - playerTotalThisSession);
+				Long currentSplit = splits.get(player);
+				splits.put(player, (currentSplit == null ? 0L : currentSplit) + sessionAverage - playerTotalThisSession);
 			}
 		}
 	}

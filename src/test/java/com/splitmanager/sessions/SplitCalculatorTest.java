@@ -40,16 +40,16 @@ public class SplitCalculatorTest
 		PlayerMetrics b = find(metrics, "B");
 		PlayerMetrics c = find(metrics, "C");
 
-		assertEquals(100000L, (long) a.total);
-		assertEquals(-50000L, (long) a.split);
+		assertEquals(100000L, a.total);
+		assertEquals(-50000L, a.split);
 		assertFalse(a.activePlayer);
 
-		assertEquals(0L, (long) b.total);
-		assertEquals(80000L, (long) b.split);
+		assertEquals(0L, b.total);
+		assertEquals(80000L, b.split);
 		assertTrue(b.activePlayer);
 
-		assertEquals(60000L, (long) c.total);
-		assertEquals(-30000L, (long) c.split);
+		assertEquals(60000L, c.total);
+		assertEquals(-30000L, c.split);
 		assertTrue(c.activePlayer);
 	}
 
@@ -75,12 +75,12 @@ public class SplitCalculatorTest
 			new SplitCalculator.GeTaxSettings(true, 15000000L, 2.0d, 5000000L));
 
 		assertEquals(5, metrics.size());
-		assertEquals(98000000L, (long) find(metrics, "A").total);
-		assertEquals(-78400000L, (long) find(metrics, "A").split);
-		assertEquals(19600000L, (long) find(metrics, "B").split);
-		assertEquals(19600000L, (long) find(metrics, "C").split);
-		assertEquals(19600000L, (long) find(metrics, "D").split);
-		assertEquals(19600000L, (long) find(metrics, "E").split);
+		assertEquals(98000000L, find(metrics, "A").total);
+		assertEquals(-78400000L, find(metrics, "A").split);
+		assertEquals(19600000L, find(metrics, "B").split);
+		assertEquals(19600000L, find(metrics, "C").split);
+		assertEquals(19600000L, find(metrics, "D").split);
+		assertEquals(19600000L, find(metrics, "E").split);
 	}
 
 	@Test
@@ -99,10 +99,10 @@ public class SplitCalculatorTest
 			new SplitCalculator.GeTaxSettings(true, 15000000L, 2.0d, 5000000L));
 
 		assertEquals(3, metrics.size());
-		assertEquals(98000000L, (long) find(metrics, "A").total);
-		assertEquals(-65333334L, (long) find(metrics, "A").split);
-		assertEquals(32666666L, (long) find(metrics, "B").split);
-		assertEquals(32666666L, (long) find(metrics, "C").split);
+		assertEquals(98000000L, find(metrics, "A").total);
+		assertEquals(-65333334L, find(metrics, "A").split);
+		assertEquals(32666666L, find(metrics, "B").split);
+		assertEquals(32666666L, find(metrics, "C").split);
 	}
 
 	@Test
@@ -124,9 +124,9 @@ public class SplitCalculatorTest
 		PlayerMetrics a = find(metrics, "A");
 		PlayerMetrics b = find(metrics, "B");
 
-		assertEquals(409000000L, (long) a.total);
-		assertEquals(-204500000L, (long) a.split);
-		assertEquals(204500000L, (long) b.split);
+		assertEquals(409000000L, a.total);
+		assertEquals(-204500000L, a.split);
+		assertEquals(204500000L, b.split);
 	}
 
 	@Test
@@ -148,14 +148,17 @@ public class SplitCalculatorTest
 			new SplitCalculator.GeTaxSettings(true, 15000000L, 2.0d, 5000000L));
 
 		assertEquals(2, metrics.size());
-		assertEquals(0L, (long) find(metrics, "A").total);
-		assertEquals(0L, (long) find(metrics, "A").split);
-		assertEquals(0L, (long) find(metrics, "B").total);
-		assertEquals(0L, (long) find(metrics, "B").split);
+		assertEquals(0L, find(metrics, "A").total);
+		assertEquals(0L, find(metrics, "A").split);
+		assertEquals(0L, find(metrics, "B").total);
+		assertEquals(0L, find(metrics, "B").split);
 	}
 
 	private PlayerMetrics find(List<PlayerMetrics> metrics, String player)
 	{
-		return metrics.stream().filter(m -> player.equals(m.player)).findFirst().get();
+		return metrics.stream()
+			.filter(m -> player.equals(m.player))
+			.findFirst()
+			.orElseThrow(() -> new AssertionError("Missing metric for " + player));
 	}
 }

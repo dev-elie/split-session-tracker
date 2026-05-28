@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Set;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import org.junit.Before;
@@ -24,7 +25,7 @@ public class ManagerKnownPlayersTest
 	@Mock
 	private PluginConfig config;
 
-	private Gson gson = new Gson().newBuilder()
+	private final Gson gson = new Gson().newBuilder()
 		.registerTypeAdapter(Instant.class, new InstantTypeAdapter())
 		.create();
 
@@ -246,7 +247,7 @@ public class ManagerKnownPlayersTest
 		assertFalse(playerManager.addKnownPlayer(null));
 		assertFalse(playerManager.addKnownPlayer(" "));
 		assertFalse(playerManager.isKnownPlayer(null));
-		assertEquals(null, playerManager.getMainName(null));
+		assertNull(playerManager.getMainName(null));
 
 		playerManager.addKnownPlayer("Player1");
 		try

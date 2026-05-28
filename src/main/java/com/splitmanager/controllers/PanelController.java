@@ -16,8 +16,8 @@ import com.splitmanager.views.PanelView;
 import java.awt.Color;
 import java.awt.HeadlessException;
 import java.awt.Toolkit;
-import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.UnsupportedFlavorException;
 import java.io.IOException;
 import java.text.ParseException;
@@ -545,33 +545,6 @@ public class PanelController implements PanelActions
 		refreshHistorySettlementContext();
 	}
 
-	private boolean isValidSettlementContext(SettlementConfigSnapshot snapshot)
-	{
-		if (snapshot == null)
-		{
-			toast(view, "Missing history context.");
-			return false;
-		}
-		if (Double.isNaN(snapshot.getGeTaxPercent())
-			|| Double.isInfinite(snapshot.getGeTaxPercent())
-			|| snapshot.getGeTaxPercent() < 0.0d)
-		{
-			toast(view, "GE tax percent must be zero or higher.");
-			return false;
-		}
-		try
-		{
-			Formats.OsrsAmountFormatter.stringAmountToLongAmount(snapshot.getGeTaxMinimumValue(), null);
-			Formats.OsrsAmountFormatter.stringAmountToLongAmount(snapshot.getGeTaxMaxPerLoot(), null);
-			return true;
-		}
-		catch (ParseException e)
-		{
-			toast(view, "Use valid GE amounts, like 8.75m or 5m.");
-			return false;
-		}
-	}
-
 	@Override
 	public void onKnownPlayerSelectionChanged(String selected)
 	{
@@ -648,35 +621,6 @@ public class PanelController implements PanelActions
 		copyToClipboard(payload);
 	}
 
-	private Session getMetricsSession()
-	{
-		if (sessionManager.isHistoryLoaded())
-		{
-			return sessionManager.getCurrentEditableSession().orElse(sessionManager.getCurrentSession().orElse(null));
-		}
-		return sessionManager.getCurrentSession().orElse(null);
-	}
-
-	private void copyToClipboard(String payload)
-	{
-		StringSelection selection = new StringSelection(payload);
-		Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
-	}
-
-	private String readClipboardText()
-	{
-		try
-		{
-			Object data = Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor);
-			return data == null ? null : data.toString();
-		}
-		catch (UnsupportedFlavorException | IOException | IllegalStateException | HeadlessException e)
-		{
-			log.warn("Failed to read clipboard text", e);
-			return null;
-		}
-	}
-
 	@Override
 	public void togglePopout(boolean editMode)
 	{
@@ -714,6 +658,62 @@ public class PanelController implements PanelActions
 			log.warn("Failed to persist tour disabled state", e);
 		}
 		view.endTour();
+	}
+
+	private boolean isValidSettlementContext(SettlementConfigSnapshot snapshot)
+	{
+		if (snapshot == null)
+		{
+			toast(view, "Missing history context.");
+			return false;
+		}
+		if (Double.isNaN(snapshot.getGeTaxPercent())
+			|| Double.isInfinite(snapshot.getGeTaxPercent())
+			|| snapshot.getGeTaxPercent() < 0.0d)
+		{
+			toast(view, "GE tax percent must be zero or higher.");
+			return false;
+		}
+		try
+		{
+			Formats.OsrsAmountFormatter.stringAmountToLongAmount(snapshot.getGeTaxMinimumValue(), null);
+			Formats.OsrsAmountFormatter.stringAmountToLongAmount(snapshot.getGeTaxMaxPerLoot(), null);
+			return true;
+		}
+		catch (ParseException e)
+		{
+			toast(view, "Use valid GE amounts, like 8.75m or 5m.");
+			return false;
+		}
+	}
+
+	private Session getMetricsSession()
+	{
+		if (sessionManager.isHistoryLoaded())
+		{
+			return sessionManager.getCurrentEditableSession().orElse(sessionManager.getCurrentSession().orElse(null));
+		}
+		return sessionManager.getCurrentSession().orElse(null);
+	}
+
+	private void copyToClipboard(String payload)
+	{
+		StringSelection selection = new StringSelection(payload);
+		Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+	}
+
+	private String readClipboardText()
+	{
+		try
+		{
+			Object data = Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor);
+			return data == null ? null : data.toString();
+		}
+		catch (UnsupportedFlavorException | IOException | IllegalStateException | HeadlessException e)
+		{
+			log.warn("Failed to read clipboard text", e);
+			return null;
+		}
 	}
 
 	/**

@@ -97,7 +97,7 @@ public final class SessionGraphData
 			long value = hourlyRate(cumulative, Duration.between(start, at));
 			entries.add(new SessionGraphEntry(Formats.getLocalTime().format(at), value, true));
 		}
-		if (activeSession && cumulative > 0L && end != null && (lastLootAt == null || !end.equals(lastLootAt)))
+		if (activeSession && cumulative > 0L && end != null && !end.equals(lastLootAt))
 		{
 			long value = hourlyRate(cumulative, Duration.between(start, end));
 			entries.add(new SessionGraphEntry(Formats.getLocalTime().format(end), value, true));

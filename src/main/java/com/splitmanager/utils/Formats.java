@@ -20,15 +20,14 @@ public class Formats
 {
 	private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 		.withZone(ZoneId.systemDefault());
+	private static final java.util.Locale LOCALE = java.util.Locale.getDefault();
+	private static final DecimalFormat DF = new DecimalFormat("#,##0");
+	private static final DecimalFormat DF_3DP = new DecimalFormat("#,##0.###");
 	private static DateTimeFormatter LOCAL_TIME = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
 		.withLocale(java.util.Locale.getDefault())
 		.withZone(ZoneId.systemDefault());
 	private static DateTimeFormatter LOCAL_DATE = DateTimeFormatter.ofPattern("dd-MMM", Locale.ENGLISH)
 		.withZone(ZoneId.systemDefault());
-
-	private static final java.util.Locale LOCALE = java.util.Locale.getDefault();
-	private static final DecimalFormat DF = new DecimalFormat("#,##0");
-	private static final DecimalFormat DF_3DP = new DecimalFormat("#,##0.###");
 	@Setter
 	private static PluginConfig config;
 
@@ -227,14 +226,14 @@ public class Formats
 			}
 
 			BigDecimal number = new BigDecimal(m.group(1));
-			Character suffixCh = (m.group(2) == null) ? null : Character.toLowerCase(m.group(2).charAt(0));
+			String suffixTxt = m.group(2);
 			// If no suffix provided by user, fall back to config default if available
 			char suffix;
 			if (config == null)
 			{
 				log.debug("No config available, falling back to global config");
 			}
-			if (suffixCh == null)
+			if (suffixTxt == null)
 			{
 				log.debug("No suffix provided, falling back to config default");
 				String def = config == null ? null : config.defaultValueMultiplier().getValue();
@@ -242,8 +241,8 @@ public class Formats
 			}
 			else
 			{
-				log.debug("Suffix provided: {}", suffixCh);
-				suffix = (suffixCh == null) ? ' ' : suffixCh;
+				suffix = Character.toLowerCase(suffixTxt.charAt(0));
+				log.debug("Suffix provided: {}", suffix);
 			}
 
 			log.debug("Parsed amo00unt: {}{}", number, suffix);

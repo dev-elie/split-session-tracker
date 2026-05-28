@@ -50,6 +50,44 @@ public class ManagerSession
 	private boolean historyEditWarningAccepted;
 	private boolean historyDirty;
 	private String historyOriginalSessionsJson;
+	private String currentSessionId;
+	@Getter
+	private boolean historyLoaded;
+
+	/**
+	 * Construct a new ManagerSession bound to the given PluginConfig.
+	 * This instance owns all in-memory session state and persists it via the config.
+	 *
+	 * @param config backing configuration/store used to load and save state
+	 */
+	@Inject
+	public ManagerSession(PluginConfig config, ManagerKnownPlayers playerManager, ManagerPlugin pluginManager, Gson gson)
+	{
+		this.config = config;
+		this.playerManager = playerManager;
+		// Use injected client's Gson, customize via newBuilder per guidelines
+		this.gson = gson.newBuilder()
+			.registerTypeAdapter(Instant.class, new InstantTypeAdapter())
+			.create();
+		this.pluginManager = pluginManager;
+		this.splitCalculator = new SplitCalculator();
+	}
+
+	/**
+	 * Utility: convert null to empty string for config storage.
+	 */
+	private static String nullToEmpty(String s)
+	{
+		return s == null ? "" : s;
+	}
+
+	/**
+	 * Utility: convert empty string to null when reading config values.
+	 */
+	private static String emptyToNull(String s)
+	{
+		return s == null || s.isEmpty() ? null : s;
+	}
 
 	/**
 	 * Force a full rebuild of the kills cache for the current session's thread.
@@ -357,44 +395,6 @@ public class ManagerSession
 		copy.setType(kill.getType());
 		return copy;
 	}
-	private String currentSessionId;
-	@Getter
-	private boolean historyLoaded;
-
-	/**
-	 * Construct a new ManagerSession bound to the given PluginConfig.
-	 * This instance owns all in-memory session state and persists it via the config.
-	 *
-	 * @param config backing configuration/store used to load and save state
-	 */
-	@Inject
-	public ManagerSession(PluginConfig config, ManagerKnownPlayers playerManager, ManagerPlugin pluginManager, Gson gson)
-	{
-		this.config = config;
-		this.playerManager = playerManager;
-		// Use injected client's Gson, customize via newBuilder per guidelines
-		this.gson = gson.newBuilder()
-			.registerTypeAdapter(Instant.class, new InstantTypeAdapter())
-			.create();
-		this.pluginManager = pluginManager;
-		this.splitCalculator = new SplitCalculator();
-	}
-
-	/**
-	 * Utility: convert null to empty string for config storage.
-	 */
-	private static String nullToEmpty(String s)
-	{
-		return s == null ? "" : s;
-	}
-
-	/**
-	 * Utility: convert empty string to null when reading config values.
-	 */
-	private static String emptyToNull(String s)
-	{
-		return s == null || s.isEmpty() ? null : s;
-	}
 
 	private String resolveMainName(String player)
 	{
@@ -635,11 +635,7 @@ public class ManagerSession
 		{
 			return false;
 		}
-		if (session.getMotherId() != null && session.getMotherId().trim().isEmpty())
-		{
-			return false;
-		}
-		return true;
+		return session.getMotherId() == null || !session.getMotherId().trim().isEmpty();
 	}
 
 	private Session copySessionForImport(Session source, String id, String motherId)
@@ -869,9 +865,16 @@ public class ManagerSession
 		{
 			return Optional.of(current);
 		}
-		return getThreadSessions(current).stream()
-			.filter(session -> session.getMotherId() != null)
-			.max(Comparator.comparing(Session::getStart));
+		List<Session> thread = getThreadSessions(current);
+		for (int i = thread.size() - 1; i >= 0; i--)
+		{
+			Session session = thread.get(i);
+			if (session != null && session.getMotherId() != null)
+			{
+				return Optional.of(session);
+			}
+		}
+		return Optional.empty();
 	}
 
 	/**

@@ -1,5 +1,6 @@
 package com.splitmanager.views;
 
+import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.splitmanager.ManagerKnownPlayers;
 import com.splitmanager.ManagerSession;
 import com.splitmanager.PluginConfig;
@@ -21,7 +22,6 @@ import com.splitmanager.views.components.DropdownRip;
 import com.splitmanager.views.components.PanelTour;
 import com.splitmanager.views.components.table.RemoveButtonEditor;
 import com.splitmanager.views.components.table.RemoveButtonRenderer;
-import com.formdev.flatlaf.extras.FlatSVGIcon;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -32,10 +32,9 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
-import java.awt.event.KeyEvent;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
-import net.runelite.client.util.SwingUtil;
+import java.awt.event.KeyEvent;
 import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
@@ -48,11 +47,11 @@ import javax.swing.BoxLayout;
 import javax.swing.DefaultCellEditor;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListModel;
+import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
-import javax.swing.Icon;
 import javax.swing.JFormattedTextField;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -72,6 +71,7 @@ import javax.swing.text.DefaultFormatterFactory;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.PluginPanel;
+import net.runelite.client.util.SwingUtil;
 
 /**
  * Swing-based view for the Auto Split Manager panel. Renders sections and forwards
@@ -93,7 +93,8 @@ public class PanelView extends PluginPanel
 	protected final ManagerSession sessionManager;
 	protected final PluginConfig config;
 	protected final ManagerKnownPlayers playerManager;
-	protected PanelController controller;
+	protected final JButton btnToggleEdit;
+	protected final JButton btnPopout;
 	private final JComboBox<String> knownPlayersDropdown = new JComboBox<>();
 	private final JTextField newPlayerField = new JTextField();
 	private final JLabel historyLabel = new JLabel("History: OFF");
@@ -142,11 +143,10 @@ public class PanelView extends PluginPanel
 	private final String infoIconUniCode = "\uD83D\uDEC8";
 	private final JPanel metricsContentWrapper = new JPanel(new BorderLayout());
 	private final PanelTour tour;
+	protected PanelController controller;
 	private PanelActions actions;
 	private JButton btnCopyJson;
 	private JButton btnCopyMd;
-	protected final JButton btnToggleEdit;
-	protected final JButton btnPopout;
 	private DropdownRip detectedValuesDropdown;
 
 	public PanelView(ManagerSession sessionManager, PluginConfig config, ManagerKnownPlayers playerManager, PanelController controller)
@@ -158,10 +158,10 @@ public class PanelView extends PluginPanel
 		bindActions(controller);
 		bindEnterSubmits();
 
-		btnToggleEdit = makeHeaderIconButton(EDIT_ICON_PATH, "H", EDIT_HEADER_ICON_SIZE);
+		btnToggleEdit = createHeaderButton(loadSvgIcon(EDIT_ICON_PATH, EDIT_HEADER_ICON_SIZE), "H");
 		btnToggleEdit.setToolTipText("Toggle history editor");
 		btnToggleEdit.addActionListener(e -> onPencilClicked());
-		btnPopout = makeHeaderIconButton(GRAPH_ICON_PATH, "P", HEADER_ICON_SIZE);
+		btnPopout = createHeaderButton(loadSvgIcon(GRAPH_ICON_PATH, HEADER_ICON_SIZE), "P");
 		btnPopout.setToolTipText("Pop out");
 		btnPopout.addActionListener(e -> onPopoutClicked());
 
@@ -274,9 +274,8 @@ public class PanelView extends PluginPanel
 		add(top, BorderLayout.NORTH);
 	}
 
-	private static JButton makeHeaderIconButton(String iconPath, String fallbackText, int iconSize)
+	private static JButton createHeaderButton(Icon icon, String fallbackText)
 	{
-		Icon icon = loadSvgIcon(iconPath, iconSize);
 		JButton button = icon == null ? new JButton(fallbackText) : new JButton(icon);
 		button.setForeground(Color.WHITE);
 		Dimension size = new Dimension(HEADER_BUTTON_SIZE, HEADER_BUTTON_SIZE);
@@ -1165,10 +1164,10 @@ public class PanelView extends PluginPanel
 		historyPanel.add(buttons, gbc);
 
 		gbc.gridy = 2;
-		historyPanel.add(btnExportHistory,gbc);
+		historyPanel.add(btnExportHistory, gbc);
 
 		gbc.gridy = 3;
-		historyPanel.add(btnImportHistory,gbc);
+		historyPanel.add(btnImportHistory, gbc);
 
 		return new DropdownRip("View history", historyPanel, false,
 			"Load a stopped session. Close history to start a new session.");

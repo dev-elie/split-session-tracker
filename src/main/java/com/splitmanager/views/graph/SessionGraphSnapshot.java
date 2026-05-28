@@ -1,7 +1,6 @@
 package com.splitmanager.views.graph;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
