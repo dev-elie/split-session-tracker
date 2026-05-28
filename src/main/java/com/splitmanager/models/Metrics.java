@@ -73,6 +73,7 @@ public final class Metrics extends AbstractTableModel
 	public Object getValueAt(int rowIndex, int columnIndex)
 	{
 		var r = rows.get(rowIndex);
+		boolean active = r.activePlayer;
 		if (!hideTotalColumn)
 		{
 			switch (columnIndex)
@@ -84,7 +85,7 @@ public final class Metrics extends AbstractTableModel
 				case 2:
 					return Formats.OsrsAmountFormatter.toSuffixString(r.split, 'k');
 				case 3:
-					return r.activePlayer ? removeBtn : addBtn;
+					return updateActionButton(active);
 				default:
 					return "";
 			}
@@ -98,11 +99,22 @@ public final class Metrics extends AbstractTableModel
 				case 1:
 					return Formats.OsrsAmountFormatter.toSuffixString(r.split, 'k');
 				case 2:
-					return r.activePlayer ? removeBtn : addBtn;
+					return updateActionButton(active);
 				default:
 					return "";
 			}
 		}
+	}
+
+	private JButton updateActionButton(boolean active)
+	{
+		removeBtn.setIcon(active
+			? new FlatSVGIcon(Metrics.class.getResource("/com/splitmanager/icons/sleep.svg")).derive(16, 16)
+			: new FlatSVGIcon(Metrics.class.getResource("/com/splitmanager/icons/sunrise.svg")).derive(16, 16));
+		addBtn.setIcon(active
+			? new FlatSVGIcon(Metrics.class.getResource("/com/splitmanager/icons/sleep.svg")).derive(16, 16)
+			: new FlatSVGIcon(Metrics.class.getResource("/com/splitmanager/icons/sunrise.svg")).derive(16, 16));
+		return active ? removeBtn : addBtn;
 	}
 
 	@Override

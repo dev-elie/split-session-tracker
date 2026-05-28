@@ -674,7 +674,9 @@ public class PopoutView extends PanelView
 			mode = SessionGraphMode.GP_PER_HOUR;
 		}
 
-		Session currentSession = getSessionManager().getCurrentSession().orElse(null);
+		Session currentSession = getSessionManager().isHistoryLoaded()
+			? getSessionManager().getCurrentEditableSession().orElse(getSessionManager().getCurrentSession().orElse(null))
+			: getSessionManager().getCurrentSession().orElse(null);
 		List<Kill> kills = currentSession == null ? List.of() : getSessionManager().getAllKills();
 		List<PlayerMetrics> metrics = currentSession == null
 			? List.of()

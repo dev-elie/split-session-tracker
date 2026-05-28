@@ -49,7 +49,7 @@ public class RemoveButtonEditor extends DefaultCellEditor
 		button.setBorder(BorderFactory.createLineBorder(ColorScheme.DARK_GRAY_COLOR));
 		button.setRolloverEnabled(true);
 		button.addActionListener(e -> {
-			if (row >= 0 && !manager.isHistoryLoaded())
+			if (row >= 0)
 			{
 				String player = (String) metricsTable.getModel().getValueAt(row, 0);
 				boolean isActive = false;

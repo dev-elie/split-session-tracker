@@ -895,6 +895,19 @@ public class PanelView extends PluginPanel
 
 	private JPanel generateHistoryContextPanel()
 	{
+		JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+		header.setOpaque(false);
+		JLabel title = new JLabel("History context");
+		title.setFont(title.getFont().deriveFont(Font.BOLD));
+		JLabel info = new JLabel(infoIconUniCode);
+		info.setForeground(Color.GRAY);
+		JLabel infoText = new JLabel("This box stores the context saved with the loaded history. "
+			+ "Use Apply to refresh the live view with the current fields, Save to overwrite the saved history context, "
+			+ "and Cancel to reload the stored values back into the fields.");
+		header.add(title);
+		header.add(info);
+		header.add(infoText);
+
 		historyContextPanel.setBorder(BorderFactory.createCompoundBorder(
 			BorderFactory.createTitledBorder("History context"),
 			BorderFactory.createEmptyBorder(3, 3, 3, 3)));
@@ -906,15 +919,50 @@ public class PanelView extends PluginPanel
 		gbc.gridx = 0;
 		gbc.gridy = 0;
 		gbc.gridwidth = 2;
-		historyContextPanel.add(historyGeTaxEnabled, gbc);
+		historyContextPanel.add(header, gbc);
 
-		gbc.gridwidth = 1;
+		JPanel taxSection = new JPanel(new GridBagLayout());
+		taxSection.setOpaque(false);
+		taxSection.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createTitledBorder("Tax"),
+			BorderFactory.createEmptyBorder(3, 3, 3, 3)));
+
+		GridBagConstraints taxGbc = new GridBagConstraints();
+		taxGbc.insets = new Insets(2, 3, 2, 3);
+		taxGbc.fill = GridBagConstraints.HORIZONTAL;
+		taxGbc.weightx = 1.0;
+		taxGbc.gridx = 0;
+		taxGbc.gridy = 0;
+		taxGbc.gridwidth = 2;
+		taxSection.add(historyGeTaxEnabled, taxGbc);
+
+		taxGbc.gridwidth = 1;
+		taxGbc.gridy++;
+		taxGbc.gridx = 0;
+		taxGbc.weightx = 0.0;
+		taxSection.add(new JLabel("Min"), taxGbc);
+		taxGbc.gridx = 1;
+		taxGbc.weightx = 1.0;
+		taxSection.add(historyGeTaxMinimumValue, taxGbc);
+
+		taxGbc.gridy++;
+		taxGbc.gridx = 0;
+		taxGbc.weightx = 0.0;
+		taxSection.add(new JLabel("Percent"), taxGbc);
+		taxGbc.gridx = 1;
+		taxGbc.weightx = 1.0;
+		taxSection.add(historyGeTaxPercent, taxGbc);
+
+		taxGbc.gridy++;
+		taxGbc.gridx = 0;
+		taxGbc.weightx = 0.0;
+		taxSection.add(new JLabel("Cap"), taxGbc);
+		taxGbc.gridx = 1;
+		taxGbc.weightx = 1.0;
+		taxSection.add(historyGeTaxMaxPerLoot, taxGbc);
+
 		gbc.gridy++;
-		addHistoryContextRow("Min", historyGeTaxMinimumValue, gbc);
-		gbc.gridy++;
-		addHistoryContextRow("Percent", historyGeTaxPercent, gbc);
-		gbc.gridy++;
-		addHistoryContextRow("Cap", historyGeTaxMaxPerLoot, gbc);
+		historyContextPanel.add(taxSection, gbc);
 
 		JPanel buttons = new JPanel(new GridLayout(1, 2, 6, 0));
 		buttons.add(btnCancelHistoryContext);
@@ -1354,7 +1402,7 @@ public class PanelView extends PluginPanel
 
 	private JComponent generateDirectPaymentsContent()
 	{
-		Session currentSession = sessionManager.getCurrentSession().orElse(null);
+		Session currentSession = getMetricsSession();
 		List<PlayerMetrics> data = sessionManager.computeMetricsFor(currentSession, true);
 		List<Transfer> transfers = PaymentProcessor.computeDirectPaymentsStructured(data);
 
@@ -1393,7 +1441,7 @@ public class PanelView extends PluginPanel
 
 	public void refreshMetrics()
 	{
-		Session currentSession = sessionManager.getCurrentSession().orElse(null);
+		Session currentSession = getMetricsSession();
 		((Metrics) metricsTable.getModel()).setData(sessionManager.computeMetricsFor(currentSession, true));
 		refreshMetricsContent();
 		onMetricsRefreshed();
@@ -1413,10 +1461,18 @@ public class PanelView extends PluginPanel
 	private void copyMetricsMarkdownToClipboard()
 	{
 		String payload = MarkdownFormatter.buildMetricsMarkdown(
-			sessionManager.computeMetricsFor(
-				sessionManager.getCurrentSession().orElse(null), true), config);
+			sessionManager.computeMetricsFor(getMetricsSession(), true), config);
 		StringSelection selection = new StringSelection(payload);
 		java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+	}
+
+	private Session getMetricsSession()
+	{
+		if (sessionManager.isHistoryLoaded())
+		{
+			return sessionManager.getCurrentEditableSession().orElse(sessionManager.getCurrentSession().orElse(null));
+		}
+		return sessionManager.getCurrentSession().orElse(null);
 	}
 
 	private static final class HistorySessionItem

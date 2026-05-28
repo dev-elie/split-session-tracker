@@ -196,7 +196,9 @@ public class MarkdownFormatter
 	 */
 	public static String buildMetricsJson(ManagerSession sessionManager)
 	{
-		Session currentSession = sessionManager.getCurrentSession().orElse(null);
+		Session currentSession = sessionManager.isHistoryLoaded()
+			? sessionManager.getCurrentEditableSession().orElse(sessionManager.getCurrentSession().orElse(null))
+			: sessionManager.getCurrentSession().orElse(null);
 		List<PlayerMetrics> data = sessionManager.computeMetricsFor(currentSession, true);
 		StringBuilder sb = new StringBuilder();
 

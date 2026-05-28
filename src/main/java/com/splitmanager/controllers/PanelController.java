@@ -503,7 +503,7 @@ public class PanelController implements PanelActions
 		{
 			return;
 		}
-		Session current = sessionManager.getCurrentSession().orElse(null);
+		Session current = getMetricsSession();
 		if (sessionManager.updateSettlementConfigSnapshotFor(current, snapshot)
 			&& sessionManager.saveHistoryChanges())
 		{
@@ -599,7 +599,7 @@ public class PanelController implements PanelActions
 	@Override
 	public void recomputeMetrics()
 	{
-		Session current = sessionManager.getCurrentSession().orElse(null);
+		Session current = getMetricsSession();
 		if (current != null)
 		{
 			view.refreshMetrics();
@@ -645,9 +645,17 @@ public class PanelController implements PanelActions
 	public void copyMetricsMarkdown()
 	{
 		String payload = MarkdownFormatter.buildMetricsMarkdown(
-			sessionManager.computeMetricsFor(
-				sessionManager.getCurrentSession().orElse(null), true), config);
+			sessionManager.computeMetricsFor(getMetricsSession(), true), config);
 		copyToClipboard(payload);
+	}
+
+	private Session getMetricsSession()
+	{
+		if (sessionManager.isHistoryLoaded())
+		{
+			return sessionManager.getCurrentEditableSession().orElse(sessionManager.getCurrentSession().orElse(null));
+		}
+		return sessionManager.getCurrentSession().orElse(null);
 	}
 
 	private void copyToClipboard(String payload)
@@ -791,7 +799,7 @@ public class PanelController implements PanelActions
 		}
 		refreshHistorySettlementContext();
 
-		Session current = sessionManager.getCurrentSession().orElse(null);
+		Session current = getMetricsSession();
 		if (current != null)
 		{
 			refreshRecentSplits(current);
@@ -810,7 +818,7 @@ public class PanelController implements PanelActions
 
 	private void applyHistorySettlementContextToView(SettlementConfigSnapshot snapshot)
 	{
-		Session current = sessionManager.getCurrentSession().orElse(null);
+		Session current = getMetricsSession();
 		if (current == null)
 		{
 			return;
@@ -825,7 +833,7 @@ public class PanelController implements PanelActions
 
 	private void refreshHistorySettlementContext()
 	{
-		Session current = sessionManager.getCurrentSession().orElse(null);
+		Session current = getMetricsSession();
 		boolean visible = sessionManager.isHistoryLoaded() && current != null;
 		view.setHistoryContextVisible(visible);
 		if (visible)
@@ -899,7 +907,7 @@ public class PanelController implements PanelActions
 		view.getBtnUnloadHistory().setEnabled(historyMode);
 		view.getBtnExportHistory().setEnabled(hasHistory);
 		view.getBtnImportHistory().setEnabled(true);
-		view.getRecentSplitsTable().setEnabled(!historyMode);
+		view.getRecentSplitsTable().setEnabled(true);
 	}
 
 	/**

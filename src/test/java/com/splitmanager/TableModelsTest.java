@@ -1,5 +1,6 @@
 package com.splitmanager;
 
+import com.google.gson.Gson;
 import com.splitmanager.models.Kill;
 import com.splitmanager.models.Metrics;
 import com.splitmanager.models.PendingValue;
@@ -7,12 +8,15 @@ import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.RecentSplitsTable;
 import com.splitmanager.models.SettlementConfigSnapshot;
 import com.splitmanager.models.WaitlistTable;
+import com.splitmanager.utils.InstantTypeAdapter;
+import com.splitmanager.views.PanelView;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JButton;
+import javax.swing.SwingUtilities;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -275,5 +279,41 @@ public class TableModelsTest
 
 		table.setHideTotalColumn(true);
 		assertTrue(table.isHidingTotalColumn());
+	}
+
+	@Test
+	public void testPanelViewRefreshMetricsUsesEditableHistorySession() throws Exception
+	{
+		PluginConfig config = mock(PluginConfig.class);
+		when(config.enableTour()).thenReturn(false);
+		when(config.directPayments()).thenReturn(false);
+		when(config.copyForDiscord()).thenReturn(false);
+		when(config.flipSettlementSign()).thenReturn(false);
+		when(config.accountForGeTax()).thenReturn(false);
+		when(config.geTaxMinimumValue()).thenReturn("15m");
+		when(config.geTaxPercent()).thenReturn(2.0d);
+		when(config.geTaxMaxPerLoot()).thenReturn("5m");
+
+		ManagerKnownPlayers playerManager = mock(ManagerKnownPlayers.class);
+		when(playerManager.getKnownPlayers()).thenReturn(Collections.emptySet());
+		when(playerManager.getKnownMains()).thenReturn(Collections.emptySet());
+		when(playerManager.getMainName("Alice")).thenReturn("Alice");
+
+		ManagerSession sessionManager = new ManagerSession(config, playerManager, mock(ManagerPlugin.class), new Gson().newBuilder()
+			.registerTypeAdapter(Instant.class, new InstantTypeAdapter())
+			.create());
+		sessionManager.startSession();
+		sessionManager.addPlayerToActive("Alice");
+		sessionManager.addKill("Alice", 100000L);
+		sessionManager.stopSession();
+		String rootId = sessionManager.getHistorySessionsNewestFirst().get(0).getId();
+		sessionManager.loadHistory(rootId);
+
+		AtomicReference<PanelView> viewRef = new AtomicReference<>();
+		SwingUtilities.invokeAndWait(() -> viewRef.set(new PanelView(sessionManager, config, playerManager, mock(com.splitmanager.controllers.PanelController.class))));
+
+		Metrics table = (Metrics) viewRef.get().getMetricsTable().getModel();
+		assertTrue(table.getRowCount() > 0);
+		assertTrue(table.isRowActive(0));
 	}
 }
