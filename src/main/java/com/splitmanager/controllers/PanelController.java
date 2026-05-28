@@ -7,21 +7,26 @@ import com.splitmanager.PluginConfig;
 import com.splitmanager.models.Metrics;
 import com.splitmanager.models.PendingValue;
 import com.splitmanager.models.Session;
+import com.splitmanager.models.SettlementConfigSnapshot;
 import com.splitmanager.models.WaitlistTable;
 import com.splitmanager.utils.Formats;
 import com.splitmanager.utils.MarkdownFormatter;
 import static com.splitmanager.utils.Utils.toast;
 import com.splitmanager.views.PanelView;
+import java.awt.Color;
+import java.awt.HeadlessException;
 import java.awt.Toolkit;
-import java.awt.Toolkit;
+import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.UnsupportedFlavorException;
+import java.io.IOException;
+import java.text.ParseException;
 import java.util.List;
 import javax.swing.DefaultCellEditor;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListModel;
 import javax.swing.JComboBox;
 import javax.swing.JOptionPane;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 //Testing push again
@@ -37,7 +42,6 @@ public class PanelController implements PanelActions
 	private final PluginConfig config;
 	private final ManagerKnownPlayers playerManager;
 	private final ManagerPanel managerPanel;
-	@Setter
 	private PanelView view;
 
 	public PanelController(ManagerSession sessionManager, PluginConfig config, ManagerKnownPlayers playerManager, ManagerPanel managerPanel)
@@ -48,13 +52,28 @@ public class PanelController implements PanelActions
 		this.managerPanel = managerPanel;
 	}
 
+	public void setView(PanelView view)
+	{
+		this.view = view;
+		sessionManager.setHistoryEditWarningHandler(this::confirmHistoryEdit);
+	}
+
+	private boolean confirmHistoryEdit()
+	{
+		int res = JOptionPane.showConfirmDialog(view,
+			"You are editing saved history. Changes will only overwrite history when you press Save in the History context box. Apply only refreshes the view with the entered context.",
+			"Edit history?",
+			JOptionPane.OK_CANCEL_OPTION,
+			JOptionPane.WARNING_MESSAGE);
+		return res == JOptionPane.OK_OPTION;
+	}
+
 	@Override
 	public void startSession()
 	{
 		if (sessionManager.isHistoryLoaded())
 		{
-			toast(view, "Unload history first.");
-			return;
+			sessionManager.unloadHistory();
 		}
 		if (sessionManager.hasActiveSession())
 		{
@@ -71,7 +90,10 @@ public class PanelController implements PanelActions
 	{
 		if (sessionManager.isHistoryLoaded())
 		{
-			toast(view, "Cannot stop while history loaded.");
+			sessionManager.unloadHistory();
+			toast(view, "History closed.");
+			managerPanel.refreshAllView();
+			refreshAllView();
 			return;
 		}
 		int res = JOptionPane.showConfirmDialog(view,
@@ -313,7 +335,7 @@ public class PanelController implements PanelActions
 			toast(view, "Select a detected value first.");
 			return;
 		}
-		if (!sessionManager.hasActiveSession())
+		if (!sessionManager.hasActiveSession() && !sessionManager.isHistoryLoaded())
 		{
 			toast(view, "Start a session first.");
 			return;
@@ -401,6 +423,129 @@ public class PanelController implements PanelActions
 	}
 
 	@Override
+	public void exportHistory(String selectedSessionId)
+	{
+		if (sessionManager.getHistorySessionsNewestFirst().isEmpty())
+		{
+			toast(view, "No history to export.");
+			return;
+		}
+
+		Object[] options = {"All history", "Selected session", "Cancel"};
+		int choice = JOptionPane.showOptionDialog(view,
+			"Export all history or the currently selected session?",
+			"Export",
+			JOptionPane.DEFAULT_OPTION,
+			JOptionPane.QUESTION_MESSAGE,
+			null,
+			options,
+			options[0]);
+
+		if (choice == 0)
+		{
+			copyToClipboard(sessionManager.exportHistorySessionsJson());
+			toast(view, "All history JSON copied.");
+			return;
+		}
+
+		if (choice == 1)
+		{
+			if (selectedSessionId == null || selectedSessionId.isBlank())
+			{
+				toast(view, "Select a session from history.");
+				return;
+			}
+			String payload = sessionManager.exportSessionThreadJson(selectedSessionId);
+			if (payload.isEmpty())
+			{
+				toast(view, "Failed to export selected history.");
+				return;
+			}
+			copyToClipboard(payload);
+			toast(view, "Selected history JSON copied.");
+		}
+	}
+
+	@Override
+	public void importHistoryFromClipboard()
+	{
+		String clipboard = readClipboardText();
+		if (clipboard == null || clipboard.trim().isEmpty())
+		{
+			toast(view, "Clipboard does not contain history JSON.");
+			return;
+		}
+
+		int importedThreads = sessionManager.importHistorySessionsJson(clipboard);
+		if (importedThreads <= 0)
+		{
+			toast(view, "No valid history found in clipboard.");
+			return;
+		}
+
+		managerPanel.refreshAllView();
+		refreshAllView();
+		toast(view, importedThreads == 1
+			? "Imported 1 history thread from clipboard."
+			: "Imported " + importedThreads + " history threads from clipboard.");
+	}
+
+	@Override
+	public void saveHistorySettlementContext(SettlementConfigSnapshot snapshot)
+	{
+		if (!sessionManager.isHistoryLoaded())
+		{
+			toast(view, "Load history first.");
+			return;
+		}
+		if (!isValidSettlementContext(snapshot))
+		{
+			return;
+		}
+		Session current = getMetricsSession();
+		if (sessionManager.updateSettlementConfigSnapshotFor(current, snapshot)
+			&& sessionManager.saveHistoryChanges())
+		{
+			toast(view, "History context saved.");
+			managerPanel.refreshAllView();
+			refreshAllView();
+		}
+		else
+		{
+			toast(view, "Failed to save history context.");
+		}
+	}
+
+	@Override
+	public void applyHistorySettlementContext(SettlementConfigSnapshot snapshot)
+	{
+		if (!sessionManager.isHistoryLoaded())
+		{
+			toast(view, "Load history first.");
+			return;
+		}
+		if (!isValidSettlementContext(snapshot))
+		{
+			return;
+		}
+		applyHistorySettlementContextToView(snapshot);
+		toast(view, "History context applied.");
+	}
+
+	@Override
+	public void cancelHistorySettlementContextEdit()
+	{
+		if (sessionManager.discardHistoryChanges())
+		{
+			toast(view, "History edits discarded.");
+			managerPanel.refreshAllView();
+			refreshAllView();
+			return;
+		}
+		refreshHistorySettlementContext();
+	}
+
+	@Override
 	public void onKnownPlayerSelectionChanged(String selected)
 	{
 		refreshAlts();
@@ -426,11 +571,11 @@ public class PanelController implements PanelActions
 	@Override
 	public void recomputeMetrics()
 	{
-		Session current = sessionManager.getCurrentSession().orElse(null);
+		Session current = getMetricsSession();
 		if (current != null)
 		{
 			view.refreshMetrics();
-			view.getRecentSplitsModel().setFromKills(sessionManager.getAllKills());
+			refreshRecentSplits(current);
 		}
 		else
 		{
@@ -458,25 +603,22 @@ public class PanelController implements PanelActions
 			view.refreshMetrics();
 		}
 		// Keep the recent splits list up-to-date (it shows all kills)
-		view.getRecentSplitsModel().setFromKills(sessionManager.getAllKills());
+		refreshRecentSplits(target);
 	}
 
 	@Override
 	public void copyMetricsJson()
 	{
 		String payload = MarkdownFormatter.buildMetricsJson(sessionManager);
-		StringSelection selection = new StringSelection(payload);
-		Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+		copyToClipboard(payload);
 	}
 
 	@Override
 	public void copyMetricsMarkdown()
 	{
 		String payload = MarkdownFormatter.buildMetricsMarkdown(
-			sessionManager.computeMetricsFor(
-				sessionManager.getCurrentSession().orElse(null), true), config);
-		StringSelection selection = new StringSelection(payload);
-		Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+			sessionManager.computeMetricsFor(getMetricsSession(), true), config);
+		copyToClipboard(payload);
 	}
 
 	@Override
@@ -516,6 +658,62 @@ public class PanelController implements PanelActions
 			log.warn("Failed to persist tour disabled state", e);
 		}
 		view.endTour();
+	}
+
+	private boolean isValidSettlementContext(SettlementConfigSnapshot snapshot)
+	{
+		if (snapshot == null)
+		{
+			toast(view, "Missing history context.");
+			return false;
+		}
+		if (Double.isNaN(snapshot.getGeTaxPercent())
+			|| Double.isInfinite(snapshot.getGeTaxPercent())
+			|| snapshot.getGeTaxPercent() < 0.0d)
+		{
+			toast(view, "GE tax percent must be zero or higher.");
+			return false;
+		}
+		try
+		{
+			Formats.OsrsAmountFormatter.stringAmountToLongAmount(snapshot.getGeTaxMinimumValue(), null);
+			Formats.OsrsAmountFormatter.stringAmountToLongAmount(snapshot.getGeTaxMaxPerLoot(), null);
+			return true;
+		}
+		catch (ParseException e)
+		{
+			toast(view, "Use valid GE amounts, like 8.75m or 5m.");
+			return false;
+		}
+	}
+
+	private Session getMetricsSession()
+	{
+		if (sessionManager.isHistoryLoaded())
+		{
+			return sessionManager.getCurrentEditableSession().orElse(sessionManager.getCurrentSession().orElse(null));
+		}
+		return sessionManager.getCurrentSession().orElse(null);
+	}
+
+	private void copyToClipboard(String payload)
+	{
+		StringSelection selection = new StringSelection(payload);
+		Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+	}
+
+	private String readClipboardText()
+	{
+		try
+		{
+			Object data = Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor);
+			return data == null ? null : data.toString();
+		}
+		catch (UnsupportedFlavorException | IOException | IllegalStateException | HeadlessException e)
+		{
+			log.warn("Failed to read clipboard text", e);
+			return null;
+		}
 	}
 
 	/**
@@ -560,9 +758,11 @@ public class PanelController implements PanelActions
 	 */
 	private void refreshSessionData()
 	{
-		Session currentSession = sessionManager.getCurrentSession().orElse(null);
+		Session currentSession = sessionManager.isHistoryLoaded()
+			? sessionManager.getCurrentEditableSession().orElse(null)
+			: sessionManager.getCurrentSession().orElse(null);
 
-		if (currentSession != null && currentSession.isActive())
+		if (currentSession != null && (currentSession.isActive() || sessionManager.isHistoryLoaded()))
 		{
 			String[] sessionPlayers = currentSession.getPlayers().toArray(new String[0]);
 			String[] notPlayers = sessionManager.getNonActivePlayers().toArray(new String[0]);
@@ -578,16 +778,66 @@ public class PanelController implements PanelActions
 			view.getCurrentSessionPlayerDropdown().setEnabled(false);
 		}
 
-		view.getHistoryLabel().setText("History: " + (sessionManager.isHistoryLoaded() ? "ON" : "OFF"));
+		if (sessionManager.isHistoryLoaded())
+		{
+			view.getHistoryLabel().setText("HISTORY LOADED");
+			view.getHistoryLabel().setOpaque(true);
+			view.getHistoryLabel().setBackground(new Color(132, 84, 0));
+			view.getHistoryLabel().setForeground(Color.WHITE);
+			view.getHistoryLabel().setBorder(javax.swing.BorderFactory.createEmptyBorder(4, 6, 4, 6));
+			view.getHistoryLabel().setToolTipText("Start closes history and starts a new session. Stop closes history.");
+		}
+		else
+		{
+			view.getHistoryLabel().setText("History: OFF");
+			view.getHistoryLabel().setOpaque(false);
+			view.getHistoryLabel().setBackground(null);
+			view.getHistoryLabel().setForeground(null);
+			view.getHistoryLabel().setBorder(null);
+			view.getHistoryLabel().setToolTipText(null);
+		}
+		refreshHistorySettlementContext();
 
-		Session current = sessionManager.getCurrentSession().orElse(null);
+		Session current = getMetricsSession();
 		if (current != null)
 		{
-			view.getRecentSplitsModel().setFromKills(sessionManager.getAllKills());
+			refreshRecentSplits(current);
 		}
 		else
 		{
 			view.getRecentSplitsModel().clear();
+		}
+	}
+
+	private void refreshRecentSplits(Session contextSession)
+	{
+		view.getRecentSplitsModel().setSettlementConfigSnapshot(sessionManager.getSettlementConfigSnapshotFor(contextSession));
+		view.getRecentSplitsModel().setFromKills(sessionManager.getAllKills());
+	}
+
+	private void applyHistorySettlementContextToView(SettlementConfigSnapshot snapshot)
+	{
+		Session current = getMetricsSession();
+		if (current == null)
+		{
+			return;
+		}
+		((Metrics) view.getMetricsTable().getModel()).setData(
+			sessionManager.computeMetricsFor(current, true, snapshot)
+		);
+		view.refreshMetricsContent();
+		view.getRecentSplitsModel().setGeTaxSettings(sessionManager.getGeTaxSettingsFor(snapshot));
+		view.getRecentSplitsModel().setFromKills(sessionManager.getAllKills());
+	}
+
+	private void refreshHistorySettlementContext()
+	{
+		Session current = getMetricsSession();
+		boolean visible = sessionManager.isHistoryLoaded() && current != null;
+		view.setHistoryContextVisible(visible);
+		if (visible)
+		{
+			view.setHistoryContextSnapshot(sessionManager.getSettlementConfigSnapshotFor(current));
 		}
 	}
 
@@ -624,20 +874,22 @@ public class PanelController implements PanelActions
 	/**
 	 * Updates the enabled or disabled state of various buttons and fields in the user interface.
 	 * The button states are set based on the current session status, player selections, and
-	 * whether the session is in a read-only mode.
+	 * whether a completed history session is currently loaded.
 	 */
 	private void refreshButtonStates()
 	{
-		boolean readOnly = sessionManager.isHistoryLoaded();
+		boolean historyMode = sessionManager.isHistoryLoaded();
 		boolean hasActiveSession = sessionManager.hasActiveSession();
+		boolean hasLoadedHistory = historyMode && sessionManager.getCurrentEditableSession().isPresent();
+		boolean canMutateSession = hasActiveSession || hasLoadedHistory;
 
-		view.getBtnStart().setEnabled(!readOnly && !hasActiveSession);
-		view.getBtnStop().setEnabled(!readOnly && hasActiveSession);
-		view.getBtnAddToSession().setEnabled(!readOnly && hasActiveSession);
-		view.getNotInCurrentSessionPlayerDropdown().setEnabled(!readOnly && hasActiveSession);
-		view.getBtnRemoveFromSession().setEnabled(!readOnly && hasActiveSession);
+		view.getBtnStart().setEnabled(historyMode || !hasActiveSession);
+		view.getBtnStop().setEnabled(historyMode || hasActiveSession);
+		view.getBtnAddToSession().setEnabled(canMutateSession);
+		view.getNotInCurrentSessionPlayerDropdown().setEnabled(canMutateSession);
+		view.getBtnRemoveFromSession().setEnabled(canMutateSession);
 
-		boolean canAddKill = !readOnly && hasActiveSession;
+		boolean canAddKill = canMutateSession;
 		boolean hasSessionPlayers = view.getCurrentSessionPlayerDropdown().getItemCount() > 0;
 
 		view.getBtnAddKill().setEnabled(canAddKill && hasSessionPlayers);
@@ -645,14 +897,16 @@ public class PanelController implements PanelActions
 
 		int waitlistRows = view.getWaitlistTableModel().getRowCount();
 
-		view.getBtnWaitlistAdd().setEnabled(!readOnly && hasActiveSession && waitlistRows > 0);
+		view.getBtnWaitlistAdd().setEnabled(canMutateSession && waitlistRows > 0);
 		view.getBtnWaitlistDelete().setEnabled(waitlistRows > 0);
 
 		boolean hasHistory = view.getHistorySessionDropdown().getItemCount() > 0;
 		view.getHistorySessionDropdown().setEnabled(!hasActiveSession && hasHistory);
 		view.getBtnViewHistory().setEnabled(!hasActiveSession && hasHistory);
-		view.getBtnUnloadHistory().setEnabled(readOnly);
-		view.getRecentSplitsTable().setEnabled(!readOnly);
+		view.getBtnUnloadHistory().setEnabled(historyMode);
+		view.getBtnExportHistory().setEnabled(hasHistory);
+		view.getBtnImportHistory().setEnabled(true);
+		view.getRecentSplitsTable().setEnabled(true);
 	}
 
 	/**

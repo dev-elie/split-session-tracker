@@ -12,6 +12,8 @@ The plugin entry point is `com.splitmanager.ManagerPlugin`, declared in `runelit
 - `./gradlew build` compiles and runs tests.
 - `./gradlew shadowJar` builds a runnable RuneLite test jar using `com.example.ExamplePluginTest`.
 - The project targets Java 11 in Gradle, even if local IDE/Qodana uses a newer JDK.
+- On this workstation, use Java 21 for Gradle because Lombok `1.18.30` does not compile under Java 25:
+  `env JAVA_HOME=/usr/lib/jvm/java-21-temurin-jdk ./gradlew test`
 - RuneLite dependencies use `latest.release`, so dependency behavior can drift over time.
 
 ## Java 11 Practices
@@ -84,6 +86,8 @@ RuneLite `PluginConfig` is used as the backing store:
 - `InstantTypeAdapter` must be registered on Gson instances that serialize session/player data containing `Instant`.
 
 Avoid changing hidden config key names unless you also plan a migration path.
+
+When a config item changes the factual settlement calculation, persist the relevant calculation context on the mother session at thread start and at thread end. Historical session metrics should prefer the saved end context, then the saved start context, and only fall back to current global config for older sessions without saved context.
 
 ## Formatting And Units
 

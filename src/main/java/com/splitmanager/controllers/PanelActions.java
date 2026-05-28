@@ -1,5 +1,7 @@
 package com.splitmanager.controllers;
 
+import com.splitmanager.models.SettlementConfigSnapshot;
+
 /**
  * Actions that the PanelView can invoke on its controller.
  */
@@ -80,16 +82,47 @@ public interface PanelActions
 	void deleteSelectedPendingValue(int tableRowIndex);
 
 	/**
-	 * Load a stopped session into read-only history mode.
+	 * Load a stopped session into history mode.
 	 *
 	 * @param sessionId selected session id
 	 */
 	void loadHistory(String sessionId);
 
 	/**
-	 * Exit read-only history mode.
+	 * Exit history mode.
 	 */
 	void unloadHistory();
+
+	/**
+	 * Export history JSON for all history or the selected history session.
+	 *
+	 * @param selectedSessionId selected history session id
+	 */
+	void exportHistory(String selectedSessionId);
+
+	/**
+	 * Import history JSON from the clipboard.
+	 */
+	void importHistoryFromClipboard();
+
+	/**
+	 * Save edited settlement context for the currently loaded history session.
+	 *
+	 * @param snapshot edited settlement-affecting config
+	 */
+	void saveHistorySettlementContext(SettlementConfigSnapshot snapshot);
+
+	/**
+	 * Recompute the loaded history view with edited settlement context without saving it.
+	 *
+	 * @param snapshot edited settlement-affecting config
+	 */
+	void applyHistorySettlementContext(SettlementConfigSnapshot snapshot);
+
+	/**
+	 * Discard edits and reload the currently loaded history settlement context.
+	 */
+	void cancelHistorySettlementContextEdit();
 
 	/**
 	 * Handle selection change in known-players list.

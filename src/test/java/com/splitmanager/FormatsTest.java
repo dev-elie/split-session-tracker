@@ -98,7 +98,7 @@ public class FormatsTest
 		assertEquals("1.5M", Formats.OsrsAmountFormatter.toSuffixString(1500000L, 'm'));
 		assertEquals("2.5B", Formats.OsrsAmountFormatter.toSuffixString(2500000000L, 'b'));
 		assertEquals("42GP", Formats.OsrsAmountFormatter.toSuffixString(42L, 'x'));
-		assertEquals("1K", Formats.OsrsAmountFormatter.toSuffixString(1000L, (String) null));
+		assertEquals("1K", Formats.OsrsAmountFormatter.toSuffixString(1000L, null));
 		assertEquals("1.5M", Formats.OsrsAmountFormatter.toSuffixString(1500000L, "m"));
 	}
 
@@ -131,7 +131,7 @@ public class FormatsTest
 		when(config.timeFormat()).thenReturn("INVALID_PATTERN");
 		when(config.dateFormat()).thenReturn("INVALID_DATE_PATTERN");
 		Formats.updateFormats();
-		
+
 		// Should not throw and provide a default format
 		String fallbackTime = Formats.getLocalTime().format(zdt);
 		assertFalse("Fallback time should not be empty", fallbackTime.isEmpty());

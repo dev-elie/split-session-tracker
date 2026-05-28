@@ -13,6 +13,7 @@ import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.SwingConstants;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
@@ -31,14 +32,12 @@ import net.runelite.client.util.SwingUtil;
  */
 public class DropdownRip extends JPanel
 {
+	private static final long serialVersionUID = 1L;
+	private static final Dimension HEADER_CONTROL_SIZE = new Dimension(24, 24);
+
 	private final Header header;
 	private final JPanel contentHolder;
 	private boolean expanded;
-
-	public DropdownRip(String title, JComponent content)
-	{
-		this(title, content, true, null, null);
-	}
 
 	public DropdownRip(String title, JComponent content, boolean expanded)
 	{
@@ -94,6 +93,7 @@ public class DropdownRip extends JPanel
 
 	private final class Header extends JPanel
 	{
+		private static final long serialVersionUID = 1L;
 		private final ImageIcon SECTION_EXPAND_ICON;
 		private final ImageIcon SECTION_RETRACT_ICON;
 
@@ -127,7 +127,6 @@ public class DropdownRip extends JPanel
 			section.add(sectionHeader, BorderLayout.NORTH);
 
 			sectionToggle = new JButton(expanded ? SECTION_RETRACT_ICON : SECTION_EXPAND_ICON);
-			//sectionToggle = new JButton();
 			sectionToggle.setPreferredSize(new Dimension(18, 0));
 			sectionToggle.setBorder(new EmptyBorder(0, 0, 0, 0));
 			sectionToggle.setToolTipText(expanded ? "Retract" : "Expand");
@@ -144,12 +143,16 @@ public class DropdownRip extends JPanel
 
 			if (extraComponent != null)
 			{
+				styleHeaderControl(extraComponent);
 				rightPanel.add(extraComponent);
 			}
 
 			JLabel info = new JLabel("\uD83D\uDEC8"); // info symbol
 			info.setToolTipText(tooltip);
 			info.setVisible(tooltip != null && !tooltip.isEmpty());
+			info.setHorizontalAlignment(SwingConstants.CENTER);
+			info.setVerticalAlignment(SwingConstants.CENTER);
+			styleHeaderControl(info);
 			rightPanel.add(info);
 
 			sectionHeader.add(rightPanel, BorderLayout.EAST);
@@ -200,6 +203,12 @@ public class DropdownRip extends JPanel
 			sectionToggle.addActionListener(a -> toggle());
 		}
 
+		private void styleHeaderControl(JComponent component)
+		{
+			component.setPreferredSize(HEADER_CONTROL_SIZE);
+			component.setMinimumSize(HEADER_CONTROL_SIZE);
+			component.setMaximumSize(HEADER_CONTROL_SIZE);
+		}
 
 		private void setExpanded(boolean ex)
 		{

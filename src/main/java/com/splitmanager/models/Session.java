@@ -29,6 +29,7 @@ import lombok.Setter;
  * - motherId: null for the mother/root; otherwise the id of the mother that all children share.
  * - players: the roster for this segment (names are stored as mains; alts resolved earlier).
  * - kills: ordered list of Kill records attributed during this segment.
+ * - settlementConfigAtStart/end: calculation context stored on mother sessions for historical metrics.
  * <p>
  * Lifecycle notes
  * - A thread starts by creating a mother + an initial child (active). Kills are written to the
@@ -44,6 +45,8 @@ import lombok.Setter;
 @Getter
 public class Session implements Serializable
 {
+	private static final long serialVersionUID = 1L;
+
 	/**
 	 * Unique identifier for this segment (UUID string). Used as the key in persistence and lookup.
 	 */
@@ -71,6 +74,16 @@ public class Session implements Serializable
 	 */
 	@Setter
 	private Instant end; // null when active
+	/**
+	 * Settlement-affecting config captured when a mother thread starts. Only meaningful on mother sessions.
+	 */
+	@Setter
+	private SettlementConfigSnapshot settlementConfigAtStart;
+	/**
+	 * Settlement-affecting config captured when a mother thread ends. Only meaningful on mother sessions.
+	 */
+	@Setter
+	private SettlementConfigSnapshot settlementConfigAtEnd;
 
 	/**
 	 * Create a new Session segment.

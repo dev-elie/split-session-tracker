@@ -3,6 +3,8 @@ package com.splitmanager.sessions;
 import com.splitmanager.models.Kill;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.Session;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -20,6 +22,15 @@ public class SplitCalculator
 	                                   Set<String> knownPlayers,
 	                                   boolean includeNonActivePlayers)
 	{
+		return compute(selectedSession, thread, knownPlayers, includeNonActivePlayers, GeTaxSettings.disabled());
+	}
+
+	public List<PlayerMetrics> compute(Session selectedSession,
+	                                   List<Session> thread,
+	                                   Set<String> knownPlayers,
+	                                   boolean includeNonActivePlayers,
+	                                   GeTaxSettings geTaxSettings)
+	{
 		if (selectedSession == null)
 		{
 			return List.of();
@@ -27,6 +38,7 @@ public class SplitCalculator
 
 		List<Session> safeThread = thread == null ? List.of() : thread;
 		Set<String> safeKnownPlayers = knownPlayers == null ? Set.of() : knownPlayers;
+		GeTaxSettings safeGeTaxSettings = geTaxSettings == null ? GeTaxSettings.disabled() : geTaxSettings;
 
 		LinkedHashSet<String> includedPlayers = new LinkedHashSet<>();
 		if (includeNonActivePlayers)
@@ -52,7 +64,7 @@ public class SplitCalculator
 
 		for (Session part : safeThread)
 		{
-			applySessionSegment(part, totals, splits);
+			applySessionSegment(part, totals, splits, safeGeTaxSettings);
 		}
 
 		List<PlayerMetrics> out = new ArrayList<>();
@@ -72,7 +84,10 @@ public class SplitCalculator
 		return out;
 	}
 
-	private void applySessionSegment(Session part, Map<String, Long> totals, Map<String, Long> splits)
+	private void applySessionSegment(Session part,
+	                                 Map<String, Long> totals,
+	                                 Map<String, Long> splits,
+	                                 GeTaxSettings geTaxSettings)
 	{
 		List<String> roster = new ArrayList<>(part.getPlayers());
 		if (roster.isEmpty())
@@ -92,7 +107,9 @@ public class SplitCalculator
 			{
 				continue;
 			}
-			perSessionTotals.computeIfPresent(kill.getPlayer(), (player, value) -> value + kill.getAmount());
+			long killAmount = kill.getAmount();
+			long splitAmount = computeSplitAmount(killAmount, geTaxSettings);
+			perSessionTotals.computeIfPresent(kill.getPlayer(), (player, value) -> value + splitAmount);
 		}
 
 		long sessionAverage = sum(perSessionTotals) / perSessionTotals.size();
@@ -102,13 +119,40 @@ public class SplitCalculator
 			long playerTotalThisSession = entry.getValue();
 			if (totals.containsKey(player))
 			{
-				totals.compute(player, (ignored, value) -> value + playerTotalThisSession);
+				Long currentTotal = totals.get(player);
+				totals.put(player, (currentTotal == null ? 0L : currentTotal) + playerTotalThisSession);
 			}
 			if (splits.containsKey(player))
 			{
-				splits.compute(player, (ignored, value) -> value + sessionAverage - playerTotalThisSession);
+				Long currentSplit = splits.get(player);
+				splits.put(player, (currentSplit == null ? 0L : currentSplit) + sessionAverage - playerTotalThisSession);
 			}
 		}
+	}
+
+	private long computeSplitAmount(long killAmount, GeTaxSettings geTaxSettings)
+	{
+		if (!geTaxSettings.enabled || killAmount < geTaxSettings.minimumValue)
+		{
+			return killAmount;
+		}
+
+		long geTax = computeGeTax(killAmount, geTaxSettings);
+		if (geTax <= 0L)
+		{
+			return killAmount;
+		}
+
+		return Math.max(killAmount - geTax, 0L);
+	}
+
+	private long computeGeTax(long killAmount, GeTaxSettings geTaxSettings)
+	{
+		BigDecimal calculated = BigDecimal.valueOf(killAmount)
+			.multiply(BigDecimal.valueOf(geTaxSettings.percent))
+			.divide(BigDecimal.valueOf(100L), 0, RoundingMode.DOWN);
+		long capped = Math.min(geTaxSettings.maxTaxPerLoot, calculated.longValue());
+		return Math.max(capped, 0L);
 	}
 
 	private long sum(Map<String, Long> values)
@@ -119,5 +163,46 @@ public class SplitCalculator
 			total += value;
 		}
 		return total;
+	}
+
+	public static final class GeTaxSettings
+	{
+		private final boolean enabled;
+		private final long minimumValue;
+		private final double percent;
+		private final long maxTaxPerLoot;
+
+		public GeTaxSettings(boolean enabled, long minimumValue, double percent, long maxTaxPerLoot)
+		{
+			this.enabled = enabled;
+			this.minimumValue = minimumValue;
+			this.percent = percent;
+			this.maxTaxPerLoot = maxTaxPerLoot;
+		}
+
+		public static GeTaxSettings disabled()
+		{
+			return new GeTaxSettings(false, 0L, 0.0d, 0L);
+		}
+
+		public boolean isEnabled()
+		{
+			return enabled;
+		}
+
+		public long getMinimumValue()
+		{
+			return minimumValue;
+		}
+
+		public double getPercent()
+		{
+			return percent;
+		}
+
+		public long getMaxTaxPerLoot()
+		{
+			return maxTaxPerLoot;
+		}
 	}
 }

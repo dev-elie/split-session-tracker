@@ -2,23 +2,44 @@ package com.splitmanager.models;
 
 
 import com.splitmanager.PluginConfig;
+import com.splitmanager.sessions.SplitCalculator;
 import com.splitmanager.utils.Formats;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.text.ParseException;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public final class RecentSplitsTable extends javax.swing.table.AbstractTableModel
 {
-	private static final String[] COLS = {"Time", "Player", "Amount"};
+	private static final long serialVersionUID = 1L;
+
+	private static final String[] COLS = {"Time", "Player", "Amount", "Tax"};
 	private static final java.time.ZoneId SYS_TZ = java.time.ZoneId.systemDefault();
 	private final java.util.List<Row> rows = new java.util.ArrayList<>(10);
 	private final PluginConfig config;
+	private SettlementConfigSnapshot settlementConfigSnapshot;
+	private SplitCalculator.GeTaxSettings geTaxSettings;
 	@Setter
 	private Listener listener;
 
 	public RecentSplitsTable(PluginConfig config)
 	{
 		this.config = config;
+	}
+
+	public void setSettlementConfigSnapshot(SettlementConfigSnapshot settlementConfigSnapshot)
+	{
+		this.settlementConfigSnapshot = settlementConfigSnapshot;
+		this.geTaxSettings = null;
+		fireTableDataChanged();
+	}
+
+	public void setGeTaxSettings(SplitCalculator.GeTaxSettings geTaxSettings)
+	{
+		this.geTaxSettings = geTaxSettings;
+		fireTableDataChanged();
 	}
 
 	@Override
@@ -30,7 +51,7 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 	@Override
 	public int getColumnCount()
 	{
-		return 3;
+		return 4;
 	}
 
 	@Override
@@ -53,7 +74,10 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 				{
 					return "Left";
 				}
-				return Formats.OsrsAmountFormatter.toSuffixString(e.kill.getAmount(), 'k');
+				return Formats.OsrsAmountFormatter.toSuffixString(cleanSplitAmount(e.kill), 'k');
+			case 3:
+				long geTax = geTaxAmount(e.kill);
+				return geTax > 0L ? Formats.OsrsAmountFormatter.toSuffixString(geTax, 'm') : "";
 			default:
 				return "";
 		}
@@ -120,6 +144,131 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 		}
 	}
 
+	private long cleanSplitAmount(Kill kill)
+	{
+		if (kill == null || kill.getAmount() == null)
+		{
+			return 0L;
+		}
+		return Math.max(kill.getAmount() - geTaxAmount(kill), 0L);
+	}
+
+	private long geTaxAmount(Kill kill)
+	{
+		if (geTaxSettings != null)
+		{
+			return geTaxAmount(kill, geTaxSettings);
+		}
+		if (kill == null || !kill.isLoot() || kill.getAmount() == null || !accountForGeTax())
+		{
+			return 0L;
+		}
+		double percent = geTaxPercent();
+		if (Double.isNaN(percent) || Double.isInfinite(percent) || percent < 0.0d)
+		{
+			percent = PluginConfig.DEFAULT_GE_TAX_PERCENT;
+		}
+		if (percent <= 0.0d)
+		{
+			return 0L;
+		}
+		if (kill.getAmount() < geTaxMinimumValue())
+		{
+			return 0L;
+		}
+		BigDecimal calculated = BigDecimal.valueOf(kill.getAmount())
+			.multiply(BigDecimal.valueOf(percent))
+			.divide(BigDecimal.valueOf(100L), 0, RoundingMode.DOWN);
+		long capped = Math.min(geTaxMaxPerLoot(), calculated.longValue());
+		return Math.max(capped, 0L);
+	}
+
+	private long geTaxAmount(Kill kill, SplitCalculator.GeTaxSettings settings)
+	{
+		if (kill == null
+			|| !kill.isLoot()
+			|| kill.getAmount() == null
+			|| settings == null
+			|| !settings.isEnabled()
+			|| kill.getAmount() < settings.getMinimumValue())
+		{
+			return 0L;
+		}
+		BigDecimal calculated = BigDecimal.valueOf(kill.getAmount())
+			.multiply(BigDecimal.valueOf(settings.getPercent()))
+			.divide(BigDecimal.valueOf(100L), 0, RoundingMode.DOWN);
+		long capped = Math.min(settings.getMaxTaxPerLoot(), calculated.longValue());
+		return Math.max(capped, 0L);
+	}
+
+	private long geTaxMinimumValue()
+	{
+		String configured = settlementConfigSnapshot == null ? config.geTaxMinimumValue() : settlementConfigSnapshot.getGeTaxMinimumValue();
+		String value = configured == null || configured.trim().isEmpty()
+			? PluginConfig.DEFAULT_GE_TAX_MINIMUM_VALUE
+			: configured.trim();
+		try
+		{
+			return Formats.OsrsAmountFormatter.stringAmountToLongAmount(value, null);
+		}
+		catch (ParseException e)
+		{
+			log.warn("Failed to parse GE tax minimum value {}; using default {}", value, PluginConfig.DEFAULT_GE_TAX_MINIMUM_VALUE, e);
+			try
+			{
+				return Formats.OsrsAmountFormatter.stringAmountToLongAmount(PluginConfig.DEFAULT_GE_TAX_MINIMUM_VALUE, null);
+			}
+			catch (ParseException defaultError)
+			{
+				log.warn("Failed to parse built-in GE tax minimum {}; disabling GE tax marker", PluginConfig.DEFAULT_GE_TAX_MINIMUM_VALUE, defaultError);
+				return Long.MAX_VALUE;
+			}
+		}
+	}
+
+	private long geTaxMaxPerLoot()
+	{
+		String configured = settlementConfigSnapshot == null ? config.geTaxMaxPerLoot() : settlementConfigSnapshot.getGeTaxMaxPerLoot();
+		String value = configured == null || configured.trim().isEmpty()
+			? PluginConfig.DEFAULT_GE_TAX_MAX_PER_LOOT_VALUE
+			: configured.trim();
+		try
+		{
+			return Formats.OsrsAmountFormatter.stringAmountToLongAmount(value, null);
+		}
+		catch (ParseException e)
+		{
+			log.warn("Failed to parse GE tax max per loot {}; using default {}", value, PluginConfig.DEFAULT_GE_TAX_MAX_PER_LOOT_VALUE, e);
+			try
+			{
+				return Formats.OsrsAmountFormatter.stringAmountToLongAmount(PluginConfig.DEFAULT_GE_TAX_MAX_PER_LOOT_VALUE, null);
+			}
+			catch (ParseException defaultError)
+			{
+				log.warn("Failed to parse built-in GE tax max per loot {}; using default {}", PluginConfig.DEFAULT_GE_TAX_MAX_PER_LOOT_VALUE, PluginConfig.DEFAULT_GE_TAX_MAX_PER_LOOT, defaultError);
+				return PluginConfig.DEFAULT_GE_TAX_MAX_PER_LOOT;
+			}
+		}
+	}
+
+	private boolean accountForGeTax()
+	{
+		if (settlementConfigSnapshot != null)
+		{
+			return settlementConfigSnapshot.isAccountForGeTax();
+		}
+		return config != null && config.accountForGeTax();
+	}
+
+	private double geTaxPercent()
+	{
+		if (settlementConfigSnapshot != null)
+		{
+			return settlementConfigSnapshot.getGeTaxPercent();
+		}
+		return config == null ? PluginConfig.DEFAULT_GE_TAX_PERCENT : config.geTaxPercent();
+	}
+
 	// Optionally expose a getter to let editors query the kill of a row:
 	public Kill getKillAt(int rowIndex)
 	{
@@ -146,11 +295,9 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 			fireTableDataChanged();
 			return;
 		}
-		int n = kills.size();
 		// Iterate from oldest to newest
-		for (int i = 0; i < n; i++)
+		for (Kill k : kills)
 		{
-			Kill k = kills.get(i);
 			addEntry(k);
 		}
 		fireTableDataChanged();

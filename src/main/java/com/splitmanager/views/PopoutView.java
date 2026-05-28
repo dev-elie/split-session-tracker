@@ -8,25 +8,25 @@ import com.splitmanager.models.Kill;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.Session;
 import com.splitmanager.utils.Formats;
+import static com.splitmanager.utils.Utils.toast;
 import com.splitmanager.views.graph.SessionGraphData;
 import com.splitmanager.views.graph.SessionGraphMode;
 import com.splitmanager.views.graph.SessionGraphPanel;
 import com.splitmanager.views.graph.SessionGraphSnapshot;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.ComponentOrientation;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridLayout;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.awt.image.BufferedImage;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
-import java.awt.datatransfer.UnsupportedFlavorException;
-import java.io.IOException;
+import java.awt.image.BufferedImage;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import javax.annotation.Nonnull;
+import javax.swing.AbstractCellEditor;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -38,24 +38,32 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JTable;
-import javax.swing.Scrollable;
 import javax.swing.JSplitPane;
+import javax.swing.JTable;
+import javax.swing.ListSelectionModel;
 import javax.swing.ScrollPaneConstants;
+import javax.swing.Scrollable;
 import javax.swing.SwingConstants;
 import javax.swing.Timer;
 import javax.swing.TransferHandler;
 import javax.swing.table.AbstractTableModel;
+import javax.swing.table.TableCellEditor;
+import javax.swing.table.TableCellRenderer;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.util.ImageUtil;
 import net.runelite.client.util.SwingUtil;
 
+@Slf4j
 public class PopoutView extends PanelView
 {
+	private static final long serialVersionUID = 1L;
+
 	private static final int GRAPH_REFRESH_INTERVAL_MS = 60_000;
 	private static final Dimension LEFT_PANE_PREFERRED_SIZE = new Dimension(330, 600);
 	private static final Dimension LEFT_PANE_MINIMUM_SIZE = new Dimension(180, 0);
 	private static final Dimension RIGHT_PANE_MINIMUM_SIZE = new Dimension(260, 0);
+	private static final ImageIcon DELETE_ICON = loadDeleteIcon();
 
 	private SessionGraphPanel graphPanel;
 	private JComboBox<SessionGraphMode> graphModeDropdown;
@@ -66,7 +74,7 @@ public class PopoutView extends PanelView
 	private JLabel topPlayerValue;
 	private final Timer graphRefreshTimer = new Timer(GRAPH_REFRESH_INTERVAL_MS, e -> refreshGraph());
 	private boolean editMode = false;
-	private JComponent editContainer;
+	private JPanel editContainer;
 
 	private JPanel dashboardContainer;
 
@@ -79,9 +87,22 @@ public class PopoutView extends PanelView
 		refreshGraph();
 	}
 
-	public JButton getToggleEditButton()
+	private static ImageIcon loadDeleteIcon()
 	{
-		return btnToggleEdit;
+		BufferedImage removeImg = ImageUtil.loadImageResource(PopoutView.class, "/com/splitmanager/icons/trash-solid-full.png");
+		return new ImageIcon(ImageUtil.resizeImage(removeImg, 16, 16));
+	}
+
+	private static JButton createDeleteButton()
+	{
+		JButton button = new JButton(DELETE_ICON);
+		button.setToolTipText("Remove entry");
+		button.setOpaque(true);
+		button.setRolloverEnabled(true);
+		button.setFocusable(false);
+		SwingUtil.removeButtonDecorations(button);
+		button.setBorder(BorderFactory.createLineBorder(ColorScheme.DARK_GRAY_COLOR));
+		return button;
 	}
 
 	public void setEditMode(boolean editMode)
@@ -93,7 +114,14 @@ public class PopoutView extends PanelView
 	@Override
 	protected void onPencilClicked()
 	{
-		toggleEditMode();
+		setEditMode(true);
+	}
+
+	@Override
+	public void onMetricsRefreshed()
+	{
+		refreshGraph();
+		refreshHistoryEditor();
 	}
 
 	@Override
@@ -120,7 +148,10 @@ public class PopoutView extends PanelView
 		setLayout(new BorderLayout(8, 0));
 		setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
-		JScrollPane controlsScroll = new JScrollPane(wrapSidebar(sidebarComponents));
+		JComponent sidebar = wrapSidebar(sidebarComponents);
+		JScrollPane controlsScroll = new JScrollPane(sidebar);
+		controlsScroll.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+		sidebar.setComponentOrientation(ComponentOrientation.LEFT_TO_RIGHT);
 		controlsScroll.setPreferredSize(LEFT_PANE_PREFERRED_SIZE);
 		controlsScroll.setMinimumSize(LEFT_PANE_MINIMUM_SIZE);
 		controlsScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
@@ -158,7 +189,7 @@ public class PopoutView extends PanelView
 		dashboardContainer.repaint();
 	}
 
-	private JComponent buildEditDashboard()
+	private JPanel buildEditDashboard()
 	{
 		JPanel panel = new JPanel(new BorderLayout(0, 8));
 		panel.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 0));
@@ -168,138 +199,26 @@ public class PopoutView extends PanelView
 		title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 2.0f));
 		header.add(title, BorderLayout.WEST);
 
-		JButton btnAdd = new JButton("Add Split");
-		header.add(btnAdd, BorderLayout.EAST);
-
 		HistoryTableModel model = new HistoryTableModel();
 		JTable table = new JTable(model);
 		table.setRowHeight(24);
+		table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
 		table.setDragEnabled(true);
 		table.setDropMode(javax.swing.DropMode.INSERT_ROWS);
 		table.setTransferHandler(new HistoryTransferHandler(model));
-
-		btnAdd.addActionListener(e -> {
-			sessionManager.insertKillAt(-1, "Player", 0L);
-			model.refresh();
-			controller.refreshAllView();
-		});
-
-		table.addMouseListener(new MouseAdapter()
-		{
-			@Override
-			public void mouseClicked(MouseEvent e)
-			{
-				if (e.getClickCount() == 2)
-				{
-					int row = table.rowAtPoint(e.getPoint());
-					if (row >= 0)
-					{
-						sessionManager.removeKillAt(row);
-						model.refresh();
-						controller.refreshAllView();
-					}
-				}
-			}
-		});
+		table.getColumnModel().getColumn(HistoryTableModel.DELETE_COLUMN).setMinWidth(34);
+		table.getColumnModel().getColumn(HistoryTableModel.DELETE_COLUMN).setMaxWidth(42);
+		table.getColumnModel().getColumn(HistoryTableModel.DELETE_COLUMN).setCellRenderer(new DeleteButtonRenderer(model));
+		table.getColumnModel().getColumn(HistoryTableModel.DELETE_COLUMN).setCellEditor(new DeleteButtonEditor(model));
 
 		panel.add(header, BorderLayout.NORTH);
 		panel.add(new JScrollPane(table), BorderLayout.CENTER);
 
-		JLabel hint = new JLabel("Double-click to delete. Drag to reorder. Columns: Player, Amount.", SwingConstants.CENTER);
-		hint.setFont(hint.getFont().deriveFont(10f));
+		JLabel hint = new JLabel("Click trash to delete. Linked joins ask for a second click. Drag to reorder.", SwingConstants.CENTER);
+		hint.setFont(hint.getFont().deriveFont(hint.getFont().getSize2D() + 1.0f));
 		panel.add(hint, BorderLayout.SOUTH);
 
 		return panel;
-	}
-
-	private class HistoryTableModel extends AbstractTableModel
-	{
-		private List<Kill> kills = new ArrayList<>();
-		private final String[] columns = {"Time", "Player", "Amount", "Type"};
-
-		HistoryTableModel()
-		{
-			refresh();
-		}
-
-		void refresh()
-		{
-			kills = new ArrayList<>(sessionManager.getAllKills());
-			fireTableDataChanged();
-		}
-
-		@Override
-		public int getRowCount()
-		{
-			return kills.size();
-		}
-
-		@Override
-		public int getColumnCount()
-		{
-			return columns.length;
-		}
-
-		@Override
-		public String getColumnName(int column)
-		{
-			return columns[column];
-		}
-
-		@Override
-		public Object getValueAt(int rowIndex, int columnIndex)
-		{
-			Kill k = kills.get(rowIndex);
-			switch (columnIndex)
-			{
-				case 0:
-					return Formats.getLocalTime().format(java.time.ZonedDateTime.ofInstant(k.getAt(), java.time.ZoneId.systemDefault()));
-				case 1:
-					return k.getPlayer();
-				case 2:
-					return k.getAmount();
-				case 3:
-					return k.getType() == null ? "LOOT" : k.getType();
-			}
-			return null;
-		}
-
-		@Override
-		public boolean isCellEditable(int rowIndex, int columnIndex)
-		{
-			return columnIndex == 1 || columnIndex == 2;
-		}
-
-		@Override
-		public void setValueAt(Object aValue, int rowIndex, int columnIndex)
-		{
-			Kill k = kills.get(rowIndex);
-			if (columnIndex == 1)
-			{
-				k.setPlayer(aValue.toString());
-			}
-			else if (columnIndex == 2)
-			{
-				try
-				{
-					k.setAmount(Long.parseLong(aValue.toString()));
-				}
-				catch (NumberFormatException ignored) {}
-			}
-			sessionManager.saveToConfig();
-			controller.refreshAllView();
-			fireTableCellUpdated(rowIndex, columnIndex);
-		}
-	}
-
-	private void toggleEditMode()
-	{
-		editMode = !editMode;
-		updateDashboardContent();
-		if (!editMode)
-		{
-			refreshGraph();
-		}
 	}
 
 	private JComponent wrapSidebar(Component[] sidebarComponents)
@@ -316,39 +235,6 @@ public class PopoutView extends PanelView
 		sidebar.add(Box.createVerticalGlue());
 		sidebar.setMinimumSize(LEFT_PANE_MINIMUM_SIZE);
 		return sidebar;
-	}
-
-	private static class ScrollableSidebarPanel extends JPanel implements Scrollable
-	{
-		@Override
-		public Dimension getPreferredScrollableViewportSize()
-		{
-			return LEFT_PANE_PREFERRED_SIZE;
-		}
-
-		@Override
-		public int getScrollableUnitIncrement(java.awt.Rectangle visibleRect, int orientation, int direction)
-		{
-			return 16;
-		}
-
-		@Override
-		public int getScrollableBlockIncrement(java.awt.Rectangle visibleRect, int orientation, int direction)
-		{
-			return Math.max(16, visibleRect.height - 32);
-		}
-
-		@Override
-		public boolean getScrollableTracksViewportWidth()
-		{
-			return true;
-		}
-
-		@Override
-		public boolean getScrollableTracksViewportHeight()
-		{
-			return false;
-		}
 	}
 
 	private JComponent buildGraphDashboard()
@@ -407,30 +293,23 @@ public class PopoutView extends PanelView
 		return panel;
 	}
 
-	@Override
-	public void onMetricsRefreshed()
-	{
-		refreshGraph();
-		refreshHistoryEditor();
-	}
-
 	private void refreshHistoryEditor()
 	{
-		if (editContainer == null) return;
-		if (editContainer instanceof JPanel)
+		if (editContainer == null)
 		{
-			for (Component c : ((JPanel) editContainer).getComponents())
+			return;
+		}
+		for (Component c : editContainer.getComponents())
+		{
+			if (c instanceof JScrollPane)
 			{
-				if (c instanceof JScrollPane)
+				JScrollPane scroll = (JScrollPane) c;
+				if (scroll.getViewport().getView() instanceof JTable)
 				{
-					JScrollPane scroll = (JScrollPane) c;
-					if (scroll.getViewport().getView() instanceof JTable)
+					JTable table = (JTable) scroll.getViewport().getView();
+					if (table.getModel() instanceof HistoryTableModel)
 					{
-						JTable table = (JTable) scroll.getViewport().getView();
-						if (table.getModel() instanceof HistoryTableModel)
-						{
-							((HistoryTableModel) table.getModel()).refresh();
-						}
+						((HistoryTableModel) table.getModel()).refresh();
 					}
 				}
 			}
@@ -450,7 +329,9 @@ public class PopoutView extends PanelView
 			mode = SessionGraphMode.GP_PER_HOUR;
 		}
 
-		Session currentSession = getSessionManager().getCurrentSession().orElse(null);
+		Session currentSession = getSessionManager().isHistoryLoaded()
+			? getSessionManager().getCurrentEditableSession().orElse(getSessionManager().getCurrentSession().orElse(null))
+			: getSessionManager().getCurrentSession().orElse(null);
 		List<Kill> kills = currentSession == null ? List.of() : getSessionManager().getAllKills();
 		List<PlayerMetrics> metrics = currentSession == null
 			? List.of()
@@ -491,13 +372,404 @@ public class PopoutView extends PanelView
 		return showSleepingPlayersToggle == null || showSleepingPlayersToggle.isSelected();
 	}
 
+	private static class ScrollableSidebarPanel extends JPanel implements Scrollable
+	{
+		private static final long serialVersionUID = 1L;
+
+		@Override
+		public Dimension getPreferredScrollableViewportSize()
+		{
+			return LEFT_PANE_PREFERRED_SIZE;
+		}
+
+		@Override
+		public int getScrollableUnitIncrement(java.awt.Rectangle visibleRect, int orientation, int direction)
+		{
+			return 16;
+		}
+
+		@Override
+		public int getScrollableBlockIncrement(java.awt.Rectangle visibleRect, int orientation, int direction)
+		{
+			return Math.max(16, visibleRect.height - 32);
+		}
+
+		@Override
+		public boolean getScrollableTracksViewportWidth()
+		{
+			return true;
+		}
+
+		@Override
+		public boolean getScrollableTracksViewportHeight()
+		{
+			return false;
+		}
+	}
+
+	private class HistoryTableModel extends AbstractTableModel
+	{
+		private static final long serialVersionUID = 1L;
+
+		private static final int DELETE_COLUMN = 4;
+		private final String[] columns = {"Time", "Player", "Amount", "Type", "X"};
+		private List<Kill> kills = new ArrayList<>();
+		private int pendingRosterDeleteRow = -1;
+		private int pendingRosterDeleteLinkedRow = -1;
+
+		HistoryTableModel()
+		{
+			refresh();
+		}
+
+		void refresh()
+		{
+			kills = new ArrayList<>(sessionManager.getAllKills());
+			clearPendingRosterDelete();
+			fireTableDataChanged();
+		}
+
+		boolean isPendingRosterDelete(int rowIndex)
+		{
+			return rowIndex >= 0
+				&& (rowIndex == pendingRosterDeleteRow || rowIndex == pendingRosterDeleteLinkedRow);
+		}
+
+		void markPendingRosterDelete(int rowIndex, int linkedRowIndex)
+		{
+			pendingRosterDeleteRow = rowIndex;
+			pendingRosterDeleteLinkedRow = linkedRowIndex;
+			fireTableRowsUpdated(Math.min(rowIndex, linkedRowIndex), Math.max(rowIndex, linkedRowIndex));
+		}
+
+		int getPendingRosterDeleteRow()
+		{
+			return pendingRosterDeleteRow;
+		}
+
+		int getPendingRosterDeleteLinkedRow()
+		{
+			return pendingRosterDeleteLinkedRow;
+		}
+
+		void clearPendingRosterDelete()
+		{
+			pendingRosterDeleteRow = -1;
+			pendingRosterDeleteLinkedRow = -1;
+		}
+
+		int findLinkedRosterEventRow(int rowIndex)
+		{
+			Kill selected = getKillAt(rowIndex).orElse(null);
+			if (selected == null || !selected.isRosterEvent())
+			{
+				return -1;
+			}
+			if (Kill.TYPE_JOINED.equalsIgnoreCase(selected.getType()))
+			{
+				return findNextLeftRosterEvent(rowIndex, selected.getPlayer());
+			}
+			return -1;
+		}
+
+		boolean hasAssignedSplitsInRosterPeriod(int rowIndex)
+		{
+			Kill selected = getKillAt(rowIndex).orElse(null);
+			if (selected == null || !Kill.TYPE_JOINED.equalsIgnoreCase(selected.getType()))
+			{
+				return false;
+			}
+			String player = selected.getPlayer();
+			for (int i = rowIndex + 1; i < kills.size(); i++)
+			{
+				Kill kill = kills.get(i);
+				if (kill != null && kill.isRosterEvent() && samePlayer(player, kill.getPlayer()))
+				{
+					return false;
+				}
+				if (kill != null && kill.isLoot() && samePlayer(player, kill.getPlayer()))
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
+		private int findNextLeftRosterEvent(int rowIndex, String player)
+		{
+			for (int i = rowIndex + 1; i < kills.size(); i++)
+			{
+				Kill candidate = kills.get(i);
+				if (samePlayer(player, candidate.getPlayer()) && candidate.isRosterEvent())
+				{
+					return Kill.TYPE_LEFT.equalsIgnoreCase(candidate.getType()) ? i : -1;
+				}
+			}
+			return -1;
+		}
+
+		private boolean samePlayer(String first, String second)
+		{
+			return first != null && first.equalsIgnoreCase(second);
+		}
+
+		java.util.Optional<Kill> getKillAt(int rowIndex)
+		{
+			return rowIndex >= 0 && rowIndex < kills.size()
+				? java.util.Optional.of(kills.get(rowIndex))
+				: java.util.Optional.empty();
+		}
+
+		@Override
+		public int getRowCount()
+		{
+			return kills.size();
+		}
+
+		@Override
+		public int getColumnCount()
+		{
+			return columns.length;
+		}
+
+		@Override
+		public Object getValueAt(int rowIndex, int columnIndex)
+		{
+			Kill k = kills.get(rowIndex);
+			switch (columnIndex)
+			{
+				case 0:
+					return Formats.getLocalTime().format(java.time.ZonedDateTime.ofInstant(k.getAt(), java.time.ZoneId.systemDefault()));
+				case 1:
+					return k.getPlayer();
+				case 2:
+					return k.getAmount();
+				case 3:
+					return k.getType() == null ? "LOOT" : k.getType();
+				case DELETE_COLUMN:
+					return DELETE_ICON;
+			}
+			return null;
+		}
+
+		@Override
+		public String getColumnName(int column)
+		{
+			return columns[column];
+		}
+
+		@Override
+		public boolean isCellEditable(int rowIndex, int columnIndex)
+		{
+			return columnIndex == 1 || columnIndex == 2 || columnIndex == DELETE_COLUMN;
+		}
+
+		@Override
+		public void setValueAt(Object aValue, int rowIndex, int columnIndex)
+		{
+			if (!sessionManager.prepareHistoryMutation())
+			{
+				return;
+			}
+			Kill k = kills.get(rowIndex);
+			if (columnIndex == 1)
+			{
+				k.setPlayer(aValue == null ? "" : aValue.toString());
+			}
+			else if (columnIndex == 2)
+			{
+				try
+				{
+					k.setAmount(Long.parseLong(aValue == null ? "" : aValue.toString()));
+				}
+				catch (NumberFormatException e)
+				{
+					log.warn("Invalid history amount '{}' at row {}", aValue, rowIndex, e);
+				}
+			}
+			sessionManager.markHistoryMutation();
+			controller.refreshAllView();
+			fireTableCellUpdated(rowIndex, columnIndex);
+		}
+	}
+
+	private class DeleteButtonRenderer implements TableCellRenderer
+	{
+		private final JButton button = createDeleteButton();
+		private final HistoryTableModel model;
+
+		DeleteButtonRenderer(HistoryTableModel model)
+		{
+			this.model = model;
+		}
+
+		@Override
+		public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column)
+		{
+			int modelRow = table.convertRowIndexToModel(row);
+			button.setToolTipText(model.isPendingRosterDelete(modelRow)
+				? "Click again to delete both linked roster events"
+				: "Remove entry");
+			return button;
+		}
+	}
+
+	private class DeleteButtonEditor extends AbstractCellEditor implements TableCellEditor
+	{
+		private static final long serialVersionUID = 1L;
+
+		private final JButton button = createDeleteButton();
+		private final HistoryTableModel model;
+		private int row = -1;
+		private JTable table;
+
+		DeleteButtonEditor(HistoryTableModel model)
+		{
+			this.model = model;
+			button.addActionListener(e -> {
+				int rowToDelete = row;
+				JTable currentTable = table;
+				fireEditingStopped();
+				row = -1;
+				if (rowToDelete >= 0 && rowToDelete < model.getRowCount())
+				{
+					if (model.isPendingRosterDelete(rowToDelete))
+					{
+						removeRows(model.getPendingRosterDeleteRow(), model.getPendingRosterDeleteLinkedRow());
+					}
+					else if (model.getKillAt(rowToDelete).map(Kill::isRosterEvent).orElse(false))
+					{
+						Kill selected = model.getKillAt(rowToDelete).orElse(null);
+						if (selected != null && Kill.TYPE_JOINED.equalsIgnoreCase(selected.getType()))
+						{
+							if (model.hasAssignedSplitsInRosterPeriod(rowToDelete))
+							{
+								model.clearPendingRosterDelete();
+								toast(PopoutView.this, "Cannot remove a join period with assigned splits.");
+								return;
+							}
+							int linkedRow = model.findLinkedRosterEventRow(rowToDelete);
+							if (linkedRow >= 0)
+							{
+								model.markPendingRosterDelete(rowToDelete, linkedRow);
+								highlightLinkedRosterRows(currentTable, rowToDelete, linkedRow);
+								return;
+							}
+						}
+						model.clearPendingRosterDelete();
+						sessionManager.removeKillAt(rowToDelete);
+					}
+					else
+					{
+						model.clearPendingRosterDelete();
+						sessionManager.removeKillAt(rowToDelete);
+					}
+					model.refresh();
+					controller.refreshAllView();
+				}
+			});
+		}
+
+		@Override
+		public Object getCellEditorValue()
+		{
+			return DELETE_ICON;
+		}
+
+		@Override
+		public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column)
+		{
+			this.table = table;
+			this.row = table.convertRowIndexToModel(row);
+			button.setToolTipText(model.isPendingRosterDelete(this.row)
+				? "Click again to delete both linked roster events"
+				: "Remove entry");
+			return button;
+		}
+
+		private void removeRows(int firstRow, int secondRow)
+		{
+			sessionManager.removeKillsAt(java.util.Arrays.asList(firstRow, secondRow));
+		}
+
+		private void highlightLinkedRosterRows(JTable table, int rowToDelete, int linkedRow)
+		{
+			if (table == null)
+			{
+				return;
+			}
+			int viewRow = table.convertRowIndexToView(rowToDelete);
+			int linkedViewRow = table.convertRowIndexToView(linkedRow);
+			table.clearSelection();
+			if (viewRow >= 0)
+			{
+				table.addRowSelectionInterval(viewRow, viewRow);
+			}
+			if (linkedViewRow >= 0)
+			{
+				table.addRowSelectionInterval(linkedViewRow, linkedViewRow);
+				table.scrollRectToVisible(table.getCellRect(linkedViewRow, 0, true));
+			}
+			table.repaint();
+		}
+	}
+
 	private class HistoryTransferHandler extends TransferHandler
 	{
+		private static final long serialVersionUID = 1L;
+
 		private final HistoryTableModel model;
 
 		HistoryTransferHandler(HistoryTableModel model)
 		{
 			this.model = model;
+		}
+
+		@Override
+		public boolean importData(TransferSupport support)
+		{
+			if (!canImport(support))
+			{
+				return false;
+			}
+			try
+			{
+				String data = (String) support.getTransferable().getTransferData(DataFlavor.stringFlavor);
+				int fromIndex = Integer.parseInt(data);
+				if (fromIndex < 0)
+				{
+					return false;
+				}
+				JTable.DropLocation dl = (JTable.DropLocation) support.getDropLocation();
+				JTable table = (JTable) support.getComponent();
+				int dropRow = dl.getRow();
+				int toIndex = dropRow >= table.getRowCount()
+					? model.getRowCount()
+					: table.convertRowIndexToModel(dropRow);
+
+				if (fromIndex != toIndex)
+				{
+					if (!sessionManager.moveKill(fromIndex, toIndex))
+					{
+						toast(PopoutView.this, "Cannot move a left event before that player joined.");
+						return false;
+					}
+					model.refresh();
+					controller.refreshAllView();
+				}
+				return true;
+			}
+			catch (Exception e)
+			{
+				log.warn("Failed to move history row", e);
+				return false;
+			}
+		}
+
+		@Override
+		public boolean canImport(TransferSupport support)
+		{
+			return support.isDataFlavorSupported(DataFlavor.stringFlavor);
 		}
 
 		@Override
@@ -510,7 +782,8 @@ public class PopoutView extends PanelView
 		protected Transferable createTransferable(JComponent c)
 		{
 			JTable table = (JTable) c;
-			int index = table.getSelectedRow();
+			int selectedRow = table.getSelectedRow();
+			int index = selectedRow < 0 ? -1 : table.convertRowIndexToModel(selectedRow);
 			return new Transferable()
 			{
 				@Override
@@ -526,45 +799,12 @@ public class PopoutView extends PanelView
 				}
 
 				@Override
-				public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException
+				@Nonnull
+				public Object getTransferData(DataFlavor flavor)
 				{
 					return String.valueOf(index);
 				}
 			};
-		}
-
-		@Override
-		public boolean canImport(TransferSupport support)
-		{
-			return support.isDataFlavorSupported(DataFlavor.stringFlavor);
-		}
-
-		@Override
-		public boolean importData(TransferSupport support)
-		{
-			if (!canImport(support))
-			{
-				return false;
-			}
-			try
-			{
-				String data = (String) support.getTransferable().getTransferData(DataFlavor.stringFlavor);
-				int fromIndex = Integer.parseInt(data);
-				JTable.DropLocation dl = (JTable.DropLocation) support.getDropLocation();
-				int toIndex = dl.getRow();
-
-				if (fromIndex != toIndex)
-				{
-					sessionManager.moveKill(fromIndex, toIndex);
-					model.refresh();
-					controller.refreshAllView();
-				}
-				return true;
-			}
-			catch (Exception e)
-			{
-				return false;
-			}
 		}
 	}
 }

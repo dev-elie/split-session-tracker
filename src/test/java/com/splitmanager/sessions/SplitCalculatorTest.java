@@ -40,16 +40,16 @@ public class SplitCalculatorTest
 		PlayerMetrics b = find(metrics, "B");
 		PlayerMetrics c = find(metrics, "C");
 
-		assertEquals(100000L, (long) a.total);
-		assertEquals(-50000L, (long) a.split);
+		assertEquals(100000L, a.total);
+		assertEquals(-50000L, a.split);
 		assertFalse(a.activePlayer);
 
-		assertEquals(0L, (long) b.total);
-		assertEquals(80000L, (long) b.split);
+		assertEquals(0L, b.total);
+		assertEquals(80000L, b.split);
 		assertTrue(b.activePlayer);
 
-		assertEquals(60000L, (long) c.total);
-		assertEquals(-30000L, (long) c.split);
+		assertEquals(60000L, c.total);
+		assertEquals(-30000L, c.split);
 		assertTrue(c.activePlayer);
 	}
 
@@ -59,8 +59,106 @@ public class SplitCalculatorTest
 		assertTrue(new SplitCalculator().compute(null, List.of(), new LinkedHashSet<>(), true).isEmpty());
 	}
 
+	@Test
+	public void appliesGeTaxToSplitValue()
+	{
+		Session mother = new Session("mother", Instant.EPOCH, null);
+		Session current = new Session("current", Instant.EPOCH.plusSeconds(1), "mother");
+		current.getPlayers().addAll(Arrays.asList("A", "B", "C", "D", "E"));
+		current.getKills().add(new Kill("current", "A", 100000000L, Instant.EPOCH.plusSeconds(2)));
+
+		List<PlayerMetrics> metrics = new SplitCalculator().compute(
+			current,
+			Arrays.asList(mother, current),
+			new LinkedHashSet<>(current.getPlayers()),
+			true,
+			new SplitCalculator.GeTaxSettings(true, 15000000L, 2.0d, 5000000L));
+
+		assertEquals(5, metrics.size());
+		assertEquals(98000000L, find(metrics, "A").total);
+		assertEquals(-78400000L, find(metrics, "A").split);
+		assertEquals(19600000L, find(metrics, "B").split);
+		assertEquals(19600000L, find(metrics, "C").split);
+		assertEquals(19600000L, find(metrics, "D").split);
+		assertEquals(19600000L, find(metrics, "E").split);
+	}
+
+	@Test
+	public void appliesGeTaxToThreePersonSplitValue()
+	{
+		Session mother = new Session("mother", Instant.EPOCH, null);
+		Session current = new Session("current", Instant.EPOCH.plusSeconds(1), "mother");
+		current.getPlayers().addAll(Arrays.asList("A", "B", "C"));
+		current.getKills().add(new Kill("current", "A", 100000000L, Instant.EPOCH.plusSeconds(2)));
+
+		List<PlayerMetrics> metrics = new SplitCalculator().compute(
+			current,
+			Arrays.asList(mother, current),
+			new LinkedHashSet<>(current.getPlayers()),
+			true,
+			new SplitCalculator.GeTaxSettings(true, 15000000L, 2.0d, 5000000L));
+
+		assertEquals(3, metrics.size());
+		assertEquals(98000000L, find(metrics, "A").total);
+		assertEquals(-65333334L, find(metrics, "A").split);
+		assertEquals(32666666L, find(metrics, "B").split);
+		assertEquals(32666666L, find(metrics, "C").split);
+	}
+
+	@Test
+	public void respectsMinimumValueAndCapsTaxPerLoot()
+	{
+		Session mother = new Session("mother", Instant.EPOCH, null);
+		Session current = new Session("current", Instant.EPOCH.plusSeconds(1), "mother");
+		current.getPlayers().addAll(Arrays.asList("A", "B"));
+		current.getKills().add(new Kill("current", "A", 14000000L, Instant.EPOCH.plusSeconds(2)));
+		current.getKills().add(new Kill("current", "A", 400000000L, Instant.EPOCH.plusSeconds(3)));
+
+		List<PlayerMetrics> metrics = new SplitCalculator().compute(
+			current,
+			Arrays.asList(mother, current),
+			new LinkedHashSet<>(current.getPlayers()),
+			true,
+			new SplitCalculator.GeTaxSettings(true, 15000000L, 2.0d, 5000000L));
+
+		PlayerMetrics a = find(metrics, "A");
+		PlayerMetrics b = find(metrics, "B");
+
+		assertEquals(409000000L, a.total);
+		assertEquals(-204500000L, a.split);
+		assertEquals(204500000L, b.split);
+	}
+
+	@Test
+	public void doesNotApplyGeTaxToRosterEvents()
+	{
+		Session mother = new Session("mother", Instant.EPOCH, null);
+		Session current = new Session("current", Instant.EPOCH.plusSeconds(1), "mother");
+		current.getPlayers().addAll(Arrays.asList("A", "B"));
+
+		Kill joined = new Kill("current", "A", 100000000L, Instant.EPOCH.plusSeconds(2));
+		joined.setType(Kill.TYPE_JOINED);
+		current.getKills().add(joined);
+
+		List<PlayerMetrics> metrics = new SplitCalculator().compute(
+			current,
+			Arrays.asList(mother, current),
+			new LinkedHashSet<>(current.getPlayers()),
+			true,
+			new SplitCalculator.GeTaxSettings(true, 15000000L, 2.0d, 5000000L));
+
+		assertEquals(2, metrics.size());
+		assertEquals(0L, find(metrics, "A").total);
+		assertEquals(0L, find(metrics, "A").split);
+		assertEquals(0L, find(metrics, "B").total);
+		assertEquals(0L, find(metrics, "B").split);
+	}
+
 	private PlayerMetrics find(List<PlayerMetrics> metrics, String player)
 	{
-		return metrics.stream().filter(m -> player.equals(m.player)).findFirst().get();
+		return metrics.stream()
+			.filter(m -> player.equals(m.player))
+			.findFirst()
+			.orElseThrow(() -> new AssertionError("Missing metric for " + player));
 	}
 }

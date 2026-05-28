@@ -6,12 +6,10 @@ import com.splitmanager.models.Session;
 import com.splitmanager.utils.Formats;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.time.format.FormatStyle;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 public final class SessionGraphData
@@ -99,7 +97,7 @@ public final class SessionGraphData
 			long value = hourlyRate(cumulative, Duration.between(start, at));
 			entries.add(new SessionGraphEntry(Formats.getLocalTime().format(at), value, true));
 		}
-		if (activeSession && cumulative > 0L && end != null && (lastLootAt == null || !end.equals(lastLootAt)))
+		if (activeSession && cumulative > 0L && end != null && !end.equals(lastLootAt))
 		{
 			long value = hourlyRate(cumulative, Duration.between(start, end));
 			entries.add(new SessionGraphEntry(Formats.getLocalTime().format(end), value, true));
@@ -124,7 +122,7 @@ public final class SessionGraphData
 		String rootId = currentSession.getMotherId() == null ? currentSession.getId() : currentSession.getMotherId();
 		List<Session> sessions = allSessions == null ? List.of() : allSessions;
 		List<Session> thread = sessions.stream()
-			.filter(session -> session != null)
+			.filter(Objects::nonNull)
 			.filter(session -> rootId.equals(session.getId()) || rootId.equals(session.getMotherId()))
 			.sorted(Comparator.comparing(Session::getStart, Comparator.nullsLast(Comparator.naturalOrder())))
 			.collect(Collectors.toList());

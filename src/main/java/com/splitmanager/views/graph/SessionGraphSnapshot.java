@@ -1,7 +1,6 @@
 package com.splitmanager.views.graph;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -28,7 +27,7 @@ public final class SessionGraphSnapshot
 		this.mode = mode == null ? SessionGraphMode.GP_PER_HOUR : mode;
 		this.entries = entries == null
 			? Collections.emptyList()
-			: Collections.unmodifiableList(new ArrayList<>(entries));
+			: List.copyOf(entries);
 		this.totalLoot = totalLoot;
 		this.gpPerHour = gpPerHour;
 		this.topPlayer = topPlayer == null ? "" : topPlayer;

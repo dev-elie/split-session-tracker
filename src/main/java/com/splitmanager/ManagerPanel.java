@@ -4,15 +4,10 @@ import com.splitmanager.controllers.PanelController;
 import com.splitmanager.views.PanelView;
 import com.splitmanager.views.PopoutView;
 import java.awt.BorderLayout;
-import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
 import javax.inject.Inject;
 import javax.inject.Singleton;
-import javax.swing.BoxLayout;
-import javax.swing.JButton;
 import javax.swing.JFrame;
-import javax.swing.JPanel;
 import javax.swing.WindowConstants;
 import lombok.Getter;
 import lombok.Setter;
@@ -86,9 +81,9 @@ public class ManagerPanel
 		{
 			popoutFrame.toFront();
 			popoutFrame.requestFocus();
-			if (startInEditMode && popoutView != null)
+			if (popoutView != null)
 			{
-				popoutView.setEditMode(true);
+				popoutView.setEditMode(startInEditMode);
 			}
 			return;
 		}

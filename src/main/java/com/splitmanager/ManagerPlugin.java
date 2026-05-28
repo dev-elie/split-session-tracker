@@ -46,9 +46,9 @@ import net.runelite.client.util.Text;
 	description = "Automatically track and manage splits for group PvM/PvP. Features include: chat detection of drops, player roster management with alt support, split calculations, session tracking, settlement metrics, and configurable UI. JSON export available for sharing and backup.",
 	tags = {"splits", "loot", "pvm", "pvp", "tracker", "clan", "group"}
 )
-/**
- * Main RuneLite plugin entry point for Auto Split Manager.
- * Wires up UI, session management, configuration, and chat/menu event handlers.
+/*
+  Main RuneLite plugin entry point for Auto Split Manager.
+  Wires up UI, session management, configuration, and chat/menu event handlers.
  */
 public class ManagerPlugin extends Plugin
 {
@@ -74,8 +74,8 @@ public class ManagerPlugin extends Plugin
 	private PanelView view;
 
 	@Override
-	/**
-	 * Initialize plugin state and register the sidebar panel/navigation.
+	/*
+	  Initialize plugin state and register the sidebar panel/navigation.
 	 */
 	protected void startUp()
 	{
@@ -101,8 +101,8 @@ public class ManagerPlugin extends Plugin
 	}
 
 	@Override
-	/**
-	 * Persist state and remove UI elements when the plugin shuts down.
+	/*
+	  Persist state and remove UI elements when the plugin shuts down.
 	 */
 	protected void shutDown()
 	{
@@ -178,6 +178,15 @@ public class ManagerPlugin extends Plugin
 			case "enablePopout":
 			case "enableTour":
 				restartViewFix();
+				break;
+			case "accountForGeTax":
+			case "geTaxMinimumValue":
+			case "geTaxPercent":
+			case "geTaxMaxPerLoot":
+				if (panelManager != null)
+				{
+					panelManager.refreshAllView();
+				}
 				break;
 			case "timeFormat":
 			case "dateFormat":
@@ -367,12 +376,10 @@ public class ManagerPlugin extends Plugin
 		if (isFriendsChatOn())
 		{
 			chatOverlay.setVisible(false);
-			chatOverlay.setChatchanOn(true);
 			return;
 		}
 
 		chatOverlay.setVisible(true);
-		chatOverlay.setChatchanOn(false);
 	}
 
 
@@ -388,15 +395,11 @@ public class ManagerPlugin extends Plugin
 		int componentId = event.getActionParam1();
 		int groupId = WidgetUtil.componentToInterface(componentId);
 
-		Session currentSession = null;
 		if (sessionManager == null)
 		{
 			return;
 		}
-		else
-		{
-			currentSession = sessionManager.getCurrentSession().orElse(null);
-		}
+		Session currentSession = sessionManager.getCurrentSession().orElse(null);
 		if (!(groupId == InterfaceID.FRIENDS || groupId == InterfaceID.CHATCHANNEL_CURRENT
 			|| componentId == InterfaceID.ClansSidepanel.PLAYERLIST || componentId == InterfaceID.ClansGuestSidepanel.PLAYERLIST))
 		{

@@ -16,6 +16,8 @@ import net.runelite.client.ui.ColorScheme;
 
 public class SessionGraphPanel extends JPanel
 {
+	private static final long serialVersionUID = 1L;
+
 	private static final Color LINE_COLOR = new Color(92, 180, 255);
 	private static final Color BAR_COLOR = new Color(222, 168, 64);
 	private static final Color POSITIVE_COLOR = new Color(86, 190, 124);
@@ -26,6 +28,7 @@ public class SessionGraphPanel extends JPanel
 	private static final int PAD_RIGHT = 24;
 	private static final int PAD_TOP = 28;
 	private static final int PAD_BOTTOM = 52;
+	private static final int X_AXIS_LABEL_MAX_LENGTH = 12;
 
 	private SessionGraphSnapshot snapshot = SessionGraphSnapshot.empty(SessionGraphMode.GP_PER_HOUR);
 
@@ -219,7 +222,7 @@ public class SessionGraphPanel extends JPanel
 			{
 				continue;
 			}
-			String label = ellipsize(entries.get(i).getLabel(), 12);
+			String label = ellipsizeAxisLabel(entries.get(i).getLabel());
 			int px = barChart
 				? xForBarIndex(i, entries.size(), x, width)
 				: xForIndex(i, entries.size(), x, width);
@@ -266,21 +269,17 @@ public class SessionGraphPanel extends JPanel
 		return max;
 	}
 
-	private String ellipsize(String value, int max)
+	private String ellipsizeAxisLabel(String value)
 	{
 		if (value == null)
 		{
 			return "";
 		}
-		if (value.length() <= max)
+		if (value.length() <= X_AXIS_LABEL_MAX_LENGTH)
 		{
 			return value;
 		}
-		if (max <= 3)
-		{
-			return value.substring(0, max);
-		}
-		return value.substring(0, max - 3) + "...";
+		return value.substring(0, X_AXIS_LABEL_MAX_LENGTH - 3) + "...";
 	}
 
 	private String formatAmount(long amount)

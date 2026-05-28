@@ -1,17 +1,22 @@
 package com.splitmanager;
 
+import com.google.gson.Gson;
 import com.splitmanager.models.Kill;
 import com.splitmanager.models.Metrics;
 import com.splitmanager.models.PendingValue;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.RecentSplitsTable;
+import com.splitmanager.models.SettlementConfigSnapshot;
 import com.splitmanager.models.WaitlistTable;
+import com.splitmanager.utils.InstantTypeAdapter;
+import com.splitmanager.views.PanelView;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JButton;
+import javax.swing.SwingUtilities;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -20,6 +25,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class TableModelsTest
 {
@@ -82,24 +88,29 @@ public class TableModelsTest
 		table.setFromKills(Arrays.asList(loot, joined, left));
 
 		assertEquals(3, table.getRowCount());
-		assertEquals(3, table.getColumnCount());
+		assertEquals(4, table.getColumnCount());
 		assertEquals("Time", table.getColumnName(0));
 		assertEquals("Player", table.getColumnName(1));
 		assertEquals("Amount", table.getColumnName(2));
+		assertEquals("Tax", table.getColumnName(3));
 		assertEquals(String.class, table.getColumnClass(0));
 		assertNotNull(table.getValueAt(0, 0));
 		assertEquals("Cara", table.getValueAt(0, 1));
 		assertEquals("Left", table.getValueAt(0, 2));
+		assertEquals("", table.getValueAt(0, 3));
 		assertEquals("Bob", table.getValueAt(1, 1));
 		assertEquals("Joined", table.getValueAt(1, 2));
+		assertEquals("", table.getValueAt(1, 3));
 		assertEquals("Alice", table.getValueAt(2, 1));
 		assertEquals("150K", table.getValueAt(2, 2));
+		assertEquals("", table.getValueAt(2, 3));
 		assertEquals("", table.getValueAt(2, 99));
 		assertFalse(table.isCellEditable(0, 1));
 		assertFalse(table.isCellEditable(1, 2));
 		assertTrue(table.isCellEditable(2, 1));
 		assertTrue(table.isCellEditable(2, 2));
 		assertFalse(table.isCellEditable(2, 0));
+		assertFalse(table.isCellEditable(2, 3));
 		assertSame(loot, table.getKillAt(2));
 		assertNull(table.getKillAt(-1));
 
@@ -107,6 +118,64 @@ public class TableModelsTest
 		assertEquals(0, table.getRowCount());
 		table.setFromKills(null);
 		assertEquals(0, table.getRowCount());
+	}
+
+	@Test
+	public void testRecentSplitsTableDisplaysTaxAndCleanSplitAmounts()
+	{
+		PluginConfig config = mock(PluginConfig.class);
+		when(config.accountForGeTax()).thenReturn(true);
+		when(config.geTaxMinimumValue()).thenReturn("15m");
+		when(config.geTaxPercent()).thenReturn(2.0d);
+		RecentSplitsTable table = new RecentSplitsTable(config);
+		Kill untaxed = new Kill("session", "Alice", 14000000L, Instant.parse("2024-01-01T00:00:00Z"));
+		Kill taxed = new Kill("session", "Bob", 100000000L, Instant.parse("2024-01-01T00:01:00Z"));
+		Kill joined = new Kill("session", "Cara", 100000000L, Instant.parse("2024-01-01T00:02:00Z"));
+		joined.setType("JOINED");
+
+		table.setFromKills(Arrays.asList(untaxed, taxed, joined));
+
+		assertEquals("Joined", table.getValueAt(0, 2));
+		assertEquals("", table.getValueAt(0, 3));
+		assertEquals("98,000K", table.getValueAt(1, 2));
+		assertEquals("2M", table.getValueAt(1, 3));
+		assertEquals("14,000K", table.getValueAt(2, 2));
+		assertEquals("", table.getValueAt(2, 3));
+	}
+
+	@Test
+	public void testRecentSplitsTableUsesConfiguredGeTaxCap()
+	{
+		PluginConfig config = mock(PluginConfig.class);
+		when(config.accountForGeTax()).thenReturn(true);
+		when(config.geTaxMinimumValue()).thenReturn("15m");
+		when(config.geTaxPercent()).thenReturn(2.0d);
+		when(config.geTaxMaxPerLoot()).thenReturn("10m");
+		RecentSplitsTable table = new RecentSplitsTable(config);
+		Kill taxed = new Kill("session", "Alice", 1000000000L, Instant.parse("2024-01-01T00:00:00Z"));
+
+		table.setFromKills(Collections.singletonList(taxed));
+
+		assertEquals("990,000K", table.getValueAt(0, 2));
+		assertEquals("10M", table.getValueAt(0, 3));
+	}
+
+	@Test
+	public void testRecentSplitsTableUsesSavedSettlementConfigSnapshot()
+	{
+		PluginConfig config = mock(PluginConfig.class);
+		when(config.accountForGeTax()).thenReturn(true);
+		when(config.geTaxMinimumValue()).thenReturn("15m");
+		when(config.geTaxPercent()).thenReturn(10.0d);
+		when(config.geTaxMaxPerLoot()).thenReturn("10m");
+		RecentSplitsTable table = new RecentSplitsTable(config);
+		table.setSettlementConfigSnapshot(new SettlementConfigSnapshot(true, "15m", 2.0d, "5m"));
+		Kill taxed = new Kill("session", "Alice", 100000000L, Instant.parse("2024-01-01T00:00:00Z"));
+
+		table.setFromKills(Collections.singletonList(taxed));
+
+		assertEquals("98,000K", table.getValueAt(0, 2));
+		assertEquals("2M", table.getValueAt(0, 3));
 	}
 
 	@Test
@@ -129,8 +198,35 @@ public class TableModelsTest
 		table.setValueAt("bad", 0, 2);
 		assertEquals(2000000L, (long) loot.getAmount());
 
+		table.setValueAt(null, 0, 1);
+		assertEquals("Alice Main", loot.getPlayer());
+		table.setValueAt(" ", 0, 1);
+		assertEquals("Alice Main", loot.getPlayer());
+		table.setValueAt("ignored", 0, 99);
+		assertEquals("Alice Main", loot.getPlayer());
+
 		table.setValueAt("ignored", -1, 1);
 		assertEquals("Alice Main", loot.getPlayer());
+	}
+
+	@Test
+	public void testRecentSplitsTableGeTaxDisplayHandlesInvalidConfig()
+	{
+		PluginConfig config = mock(PluginConfig.class);
+		when(config.accountForGeTax()).thenReturn(true);
+		RecentSplitsTable table = new RecentSplitsTable(config);
+		Kill taxed = new Kill("session", "Alice", 1000000000L, Instant.parse("2024-01-01T00:00:00Z"));
+		table.setFromKills(Collections.singletonList(taxed));
+
+		when(config.geTaxPercent()).thenReturn(Double.NaN);
+		when(config.geTaxMinimumValue()).thenReturn("not-an-amount");
+		when(config.geTaxMaxPerLoot()).thenReturn("5m");
+		assertEquals("995,000K", table.getValueAt(0, 2));
+		assertEquals("5M", table.getValueAt(0, 3));
+
+		when(config.geTaxPercent()).thenReturn(0.0d);
+		assertEquals("1,000,000K", table.getValueAt(0, 2));
+		assertEquals("", table.getValueAt(0, 3));
 	}
 
 	@Test
@@ -183,5 +279,41 @@ public class TableModelsTest
 
 		table.setHideTotalColumn(true);
 		assertTrue(table.isHidingTotalColumn());
+	}
+
+	@Test
+	public void testPanelViewRefreshMetricsUsesEditableHistorySession() throws Exception
+	{
+		PluginConfig config = mock(PluginConfig.class);
+		when(config.enableTour()).thenReturn(false);
+		when(config.directPayments()).thenReturn(false);
+		when(config.copyForDiscord()).thenReturn(false);
+		when(config.flipSettlementSign()).thenReturn(false);
+		when(config.accountForGeTax()).thenReturn(false);
+		when(config.geTaxMinimumValue()).thenReturn("15m");
+		when(config.geTaxPercent()).thenReturn(2.0d);
+		when(config.geTaxMaxPerLoot()).thenReturn("5m");
+
+		ManagerKnownPlayers playerManager = mock(ManagerKnownPlayers.class);
+		when(playerManager.getKnownPlayers()).thenReturn(Collections.emptySet());
+		when(playerManager.getKnownMains()).thenReturn(Collections.emptySet());
+		when(playerManager.getMainName("Alice")).thenReturn("Alice");
+
+		ManagerSession sessionManager = new ManagerSession(config, playerManager, mock(ManagerPlugin.class), new Gson().newBuilder()
+			.registerTypeAdapter(Instant.class, new InstantTypeAdapter())
+			.create());
+		sessionManager.startSession();
+		sessionManager.addPlayerToActive("Alice");
+		sessionManager.addKill("Alice", 100000L);
+		sessionManager.stopSession();
+		String rootId = sessionManager.getHistorySessionsNewestFirst().get(0).getId();
+		sessionManager.loadHistory(rootId);
+
+		AtomicReference<PanelView> viewRef = new AtomicReference<>();
+		SwingUtilities.invokeAndWait(() -> viewRef.set(new PanelView(sessionManager, config, playerManager, mock(com.splitmanager.controllers.PanelController.class))));
+
+		Metrics table = (Metrics) viewRef.get().getMetricsTable().getModel();
+		assertTrue(table.getRowCount() > 0);
+		assertTrue(table.isRowActive(0));
 	}
 }

@@ -1,29 +1,31 @@
 package com.splitmanager.models;
 
+import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.splitmanager.utils.Formats;
-import java.awt.image.BufferedImage;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 import javax.swing.BorderFactory;
-import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.table.AbstractTableModel;
 import net.runelite.client.ui.ColorScheme;
-import net.runelite.client.util.ImageUtil;
 
 public final class Metrics extends AbstractTableModel
 {
-	private final JButton removeBtn = createStyledButton("/com/splitmanager/icons/trash-solid-full.png");
-	private final JButton addBtn = createStyledButton("/com/splitmanager/icons/trash-arrow-up-solid-full.png");
+	private static final long serialVersionUID = 1L;
+	private static final FlatSVGIcon REMOVE_ICON = new FlatSVGIcon(
+		Metrics.class.getResource("/com/splitmanager/icons/sleep.svg")).derive(16, 16);
+	private static final FlatSVGIcon ADD_ICON = new FlatSVGIcon(
+		Metrics.class.getResource("/com/splitmanager/icons/sunrise.svg")).derive(16, 16);
+
+	private final JButton removeBtn = createStyledButton("/com/splitmanager/icons/sleep.svg");
+	private final JButton addBtn = createStyledButton("/com/splitmanager/icons/sunrise.svg");
 	private List<PlayerMetrics> rows = List.of();
 	private boolean hideTotalColumn = false;
 
 	private static JButton createStyledButton(String iconPath)
 	{
-		BufferedImage img = ImageUtil.loadImageResource(Metrics.class, iconPath);
-		BufferedImage scaledImg = ImageUtil.resizeImage(img, 16, 16);
-		JButton btn = new JButton(new ImageIcon(scaledImg));
+		JButton btn = new JButton(new FlatSVGIcon(Metrics.class.getResource(iconPath)).derive(16, 16));
 		btn.setBorder(BorderFactory.createLineBorder(ColorScheme.DARK_GRAY_COLOR));
 		return btn;
 	}
@@ -77,6 +79,7 @@ public final class Metrics extends AbstractTableModel
 	public Object getValueAt(int rowIndex, int columnIndex)
 	{
 		var r = rows.get(rowIndex);
+		boolean active = r.activePlayer;
 		if (!hideTotalColumn)
 		{
 			switch (columnIndex)
@@ -88,7 +91,7 @@ public final class Metrics extends AbstractTableModel
 				case 2:
 					return Formats.OsrsAmountFormatter.toSuffixString(r.split, 'k');
 				case 3:
-					return r.activePlayer ? removeBtn : addBtn;
+					return updateActionButton(active);
 				default:
 					return "";
 			}
@@ -102,11 +105,18 @@ public final class Metrics extends AbstractTableModel
 				case 1:
 					return Formats.OsrsAmountFormatter.toSuffixString(r.split, 'k');
 				case 2:
-					return r.activePlayer ? removeBtn : addBtn;
+					return updateActionButton(active);
 				default:
 					return "";
 			}
 		}
+	}
+
+	private JButton updateActionButton(boolean active)
+	{
+		removeBtn.setIcon(REMOVE_ICON);
+		addBtn.setIcon(ADD_ICON);
+		return active ? removeBtn : addBtn;
 	}
 
 	@Override
