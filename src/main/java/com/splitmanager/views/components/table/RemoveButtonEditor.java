@@ -1,13 +1,11 @@
 package com.splitmanager.views.components.table;
 
 import com.formdev.flatlaf.extras.FlatSVGIcon;
-import com.splitmanager.ManagerPanel;
 import com.splitmanager.ManagerSession;
 import com.splitmanager.controllers.PanelActions;
 import com.splitmanager.models.Metrics;
 import static com.splitmanager.utils.Utils.toast;
 import java.awt.Component;
-import javax.inject.Inject;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultCellEditor;
 import javax.swing.JButton;
@@ -22,6 +20,7 @@ import net.runelite.client.ui.ColorScheme;
  */
 public class RemoveButtonEditor extends DefaultCellEditor
 {
+	private static final long serialVersionUID = 1L;
 	private static final FlatSVGIcon REMOVE_ICON = new FlatSVGIcon(
 		RemoveButtonEditor.class.getResource("/com/splitmanager/icons/sleep.svg")).derive(16, 16);
 	private static final FlatSVGIcon ADD_ICON = new FlatSVGIcon(
@@ -29,9 +28,6 @@ public class RemoveButtonEditor extends DefaultCellEditor
 
 	private final JButton button = new JButton();
 	private int row = -1;
-
-	@Inject
-	private ManagerPanel managerPanel;
 
 	/**
 	 * Create the editor and wire the add/remove behavior.

@@ -12,6 +12,12 @@ import net.runelite.client.ui.ColorScheme;
 
 public final class Metrics extends AbstractTableModel
 {
+	private static final long serialVersionUID = 1L;
+	private static final FlatSVGIcon REMOVE_ICON = new FlatSVGIcon(
+		Metrics.class.getResource("/com/splitmanager/icons/sleep.svg")).derive(16, 16);
+	private static final FlatSVGIcon ADD_ICON = new FlatSVGIcon(
+		Metrics.class.getResource("/com/splitmanager/icons/sunrise.svg")).derive(16, 16);
+
 	private final JButton removeBtn = createStyledButton("/com/splitmanager/icons/sleep.svg");
 	private final JButton addBtn = createStyledButton("/com/splitmanager/icons/sunrise.svg");
 	private List<PlayerMetrics> rows = List.of();
@@ -108,12 +114,8 @@ public final class Metrics extends AbstractTableModel
 
 	private JButton updateActionButton(boolean active)
 	{
-		removeBtn.setIcon(active
-			? new FlatSVGIcon(Metrics.class.getResource("/com/splitmanager/icons/sleep.svg")).derive(16, 16)
-			: new FlatSVGIcon(Metrics.class.getResource("/com/splitmanager/icons/sunrise.svg")).derive(16, 16));
-		addBtn.setIcon(active
-			? new FlatSVGIcon(Metrics.class.getResource("/com/splitmanager/icons/sleep.svg")).derive(16, 16)
-			: new FlatSVGIcon(Metrics.class.getResource("/com/splitmanager/icons/sunrise.svg")).derive(16, 16));
+		removeBtn.setIcon(REMOVE_ICON);
+		addBtn.setIcon(ADD_ICON);
 		return active ? removeBtn : addBtn;
 	}
 

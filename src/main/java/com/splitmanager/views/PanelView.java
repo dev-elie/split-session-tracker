@@ -39,9 +39,6 @@ import net.runelite.client.util.SwingUtil;
 import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.time.format.FormatStyle;
 import java.util.List;
 import java.util.Locale;
 import javax.swing.AbstractAction;
@@ -76,17 +73,20 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.PluginPanel;
 
-@Slf4j
-@Getter
 /**
  * Swing-based view for the Auto Split Manager panel. Renders sections and forwards
  * user interactions to PanelActions.
  */
+@Slf4j
+@Getter
 public class PanelView extends PluginPanel
 {
+	private static final long serialVersionUID = 1L;
+
 	private static final int HEADER_ICON_SIZE = 16;
 	private static final int EDIT_HEADER_ICON_SIZE = 14;
 	private static final int HEADER_BUTTON_SIZE = 24;
+	private static final int DIRECT_PAYMENT_NAME_MAX_LENGTH = 7;
 	private static final String EDIT_ICON_PATH = "/com/splitmanager/icons/edit.svg";
 	private static final String GRAPH_ICON_PATH = "/com/splitmanager/icons/graph.svg";
 
@@ -161,7 +161,7 @@ public class PanelView extends PluginPanel
 		btnToggleEdit = makeHeaderIconButton(EDIT_ICON_PATH, "H", EDIT_HEADER_ICON_SIZE);
 		btnToggleEdit.setToolTipText("Toggle history editor");
 		btnToggleEdit.addActionListener(e -> onPencilClicked());
-		btnPopout = makeHeaderIconButton(GRAPH_ICON_PATH, "P");
+		btnPopout = makeHeaderIconButton(GRAPH_ICON_PATH, "P", HEADER_ICON_SIZE);
 		btnPopout.setToolTipText("Pop out");
 		btnPopout.addActionListener(e -> onPopoutClicked());
 
@@ -274,11 +274,6 @@ public class PanelView extends PluginPanel
 		add(top, BorderLayout.NORTH);
 	}
 
-	private static JButton makeHeaderIconButton(String iconPath, String fallbackText)
-	{
-		return makeHeaderIconButton(iconPath, fallbackText, HEADER_ICON_SIZE);
-	}
-
 	private static JButton makeHeaderIconButton(String iconPath, String fallbackText, int iconSize)
 	{
 		Icon icon = loadSvgIcon(iconPath, iconSize);
@@ -297,11 +292,6 @@ public class PanelView extends PluginPanel
 		return button;
 	}
 
-	private static Icon loadSvgIcon(String iconPath)
-	{
-		return loadSvgIcon(iconPath, HEADER_ICON_SIZE);
-	}
-
 	private static Icon loadSvgIcon(String iconPath, int iconSize)
 	{
 		java.net.URL resource = PanelView.class.getResource(iconPath);
@@ -314,14 +304,14 @@ public class PanelView extends PluginPanel
 		return new FlatSVGIcon(resource).derive(iconSize, iconSize);
 	}
 
-	private static String shortenName(String name, int maxLen)
+	private static String shortenDirectPaymentName(String name)
 	{
 		if (name == null)
 		{
 			return "";
 		}
 		String n = name.trim();
-		return n.length() <= maxLen ? n : n.substring(0, maxLen);
+		return n.length() <= DIRECT_PAYMENT_NAME_MAX_LENGTH ? n : n.substring(0, DIRECT_PAYMENT_NAME_MAX_LENGTH);
 	}
 
 	public void bindActions(PanelActions actions)
@@ -352,9 +342,7 @@ public class PanelView extends PluginPanel
 			actions.removeSelectedAlt((String) knownPlayersDropdown.getSelectedItem(),
 				altsList.getSelectedValue()));
 
-		btnAddKill.addActionListener(e -> {
-			actions.addKillFromInputs();
-		});
+		btnAddKill.addActionListener(e -> actions.addKillFromInputs());
 
 		btnWaitlistAdd.addActionListener(e -> actions.applySelectedPendingValue(waitlistTable.getSelectedRow()));
 		btnWaitlistDelete.addActionListener(e -> actions.deleteSelectedPendingValue(waitlistTable.getSelectedRow()));
@@ -408,6 +396,8 @@ public class PanelView extends PluginPanel
 			.put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "submit-form");
 		component.getActionMap().put("submit-form", new AbstractAction()
 		{
+			private static final long serialVersionUID = 1L;
+
 			@Override
 			public void actionPerformed(java.awt.event.ActionEvent e)
 			{
@@ -458,11 +448,6 @@ public class PanelView extends PluginPanel
 		tour.endTour();
 	}
 
-	public void endTourAndDisable()
-	{
-		tour.endTourAndDisable();
-	}
-
 	public void nextTourStep()
 	{
 		tour.nextStep();
@@ -471,11 +456,6 @@ public class PanelView extends PluginPanel
 	public void prevTourStep()
 	{
 		tour.previousStep();
-	}
-
-	public void gotoStep(int step)
-	{
-		tour.gotoStep(step);
 	}
 
 	public void setHistorySessions(List<Session> sessions, String selectedSessionId)
@@ -539,12 +519,12 @@ public class PanelView extends PluginPanel
 		final JComboBox<String> playerCombo = new JComboBox<>();
 		javax.swing.DefaultCellEditor playerEditor = new javax.swing.DefaultCellEditor(playerCombo)
 		{
+			private static final long serialVersionUID = 1L;
+
 			@Override
 			public java.awt.Component getTableCellEditorComponent(
 				JTable table, Object value, boolean isSelected, int row, int column)
 			{
-				JComboBox<String> combo = playerCombo;
-
 				// Determine players for this row's session
 				String[] choices;
 				Kill k = ((RecentSplitsTable) table.getModel()).getKillAt(row);
@@ -565,9 +545,9 @@ public class PanelView extends PluginPanel
 				}
 				choices = playersForRow.toArray(new String[0]);
 
-				combo.setModel(new DefaultComboBoxModel<>(choices));
-				combo.setSelectedItem(value);
-				return combo;
+				playerCombo.setModel(new DefaultComboBoxModel<>(choices));
+				playerCombo.setSelectedItem(value);
+				return playerCombo;
 			}
 		};
 		t.getColumnModel().getColumn(1).setCellEditor(playerEditor);
@@ -895,18 +875,25 @@ public class PanelView extends PluginPanel
 
 	private JPanel generateHistoryContextPanel()
 	{
-		JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+		JPanel header = new JPanel(new BorderLayout(4, 2));
 		header.setOpaque(false);
+		JPanel titleRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+		titleRow.setOpaque(false);
 		JLabel title = new JLabel("History context");
 		title.setFont(title.getFont().deriveFont(Font.BOLD));
-		JLabel info = new JLabel(infoIconUniCode);
-		info.setForeground(Color.GRAY);
-		JLabel infoText = new JLabel("This box stores the context saved with the loaded history. "
+		titleRow.add(title);
+		header.add(titleRow, BorderLayout.NORTH);
+
+		JTextArea infoText = new JTextArea("This box stores the context saved with the loaded history. "
 			+ "Use Apply to refresh the live view with the current fields, Save to overwrite the saved history context, "
 			+ "and Cancel to reload the stored values back into the fields.");
-		header.add(title);
-		header.add(info);
-		header.add(infoText);
+		infoText.setEditable(false);
+		infoText.setOpaque(false);
+		infoText.setLineWrap(true);
+		infoText.setWrapStyleWord(true);
+		infoText.setFocusable(false);
+		infoText.setBorder(null);
+		header.add(infoText, BorderLayout.CENTER);
 
 		historyContextPanel.setBorder(BorderFactory.createCompoundBorder(
 			BorderFactory.createTitledBorder("History context"),
@@ -979,16 +966,6 @@ public class PanelView extends PluginPanel
 		return historyContextPanel;
 	}
 
-	private void addHistoryContextRow(String label, JTextField field, GridBagConstraints gbc)
-	{
-		gbc.gridx = 0;
-		gbc.weightx = 0.0;
-		historyContextPanel.add(new JLabel(label), gbc);
-		gbc.gridx = 1;
-		gbc.weightx = 1.0;
-		historyContextPanel.add(field, gbc);
-	}
-
 	public void setHistoryContextVisible(boolean visible)
 	{
 		historyContextPanel.setVisible(visible);
@@ -1047,45 +1024,37 @@ public class PanelView extends PluginPanel
 		// Align Value column to the right
 		javax.swing.table.DefaultTableCellRenderer right = new javax.swing.table.DefaultTableCellRenderer();
 		right.setHorizontalAlignment(SwingConstants.RIGHT);
-		try
+		if (waitlistTable.getColumnModel().getColumnCount() > 1)
 		{
 			waitlistTable.getColumnModel().getColumn(1).setCellRenderer(right);
-		}
-		catch (Exception ignored)
-		{
 		}
 
 		// Editor for Player column (use known players list)
 		final JComboBox<String> wlPlayerCombo = new JComboBox<>();
 		DefaultCellEditor wlPlayerEditor = new DefaultCellEditor(wlPlayerCombo)
 		{
+			private static final long serialVersionUID = 1L;
+
 			@Override
 			public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column)
 			{
-				JComboBox<String> combo = wlPlayerCombo;
-				combo.setModel(new DefaultComboBoxModel<>(playerManager.getKnownMains().toArray(new String[0])));
-				combo.setSelectedItem(value);
-				return combo;
+				wlPlayerCombo.setModel(new DefaultComboBoxModel<>(playerManager.getKnownMains().toArray(new String[0])));
+				wlPlayerCombo.setSelectedItem(value);
+				return wlPlayerCombo;
 			}
 		};
-		try
+		if (waitlistTable.getColumnModel().getColumnCount() > 2)
 		{
 			waitlistTable.getColumnModel().getColumn(2).setCellEditor(wlPlayerEditor);
-		}
-		catch (Exception ignored)
-		{
 		}
 
 		// Editor for Value column (OSRS amount)
 		JFormattedTextField wlAmtField = new JFormattedTextField(new DefaultFormatterFactory(new Formats.OsrsAmountFormatter()));
 		wlAmtField.setBorder(null);
 		DefaultCellEditor wlAmtEditor = new DefaultCellEditor(wlAmtField);
-		try
+		if (waitlistTable.getColumnModel().getColumnCount() > 1)
 		{
 			waitlistTable.getColumnModel().getColumn(1).setCellEditor(wlAmtEditor);
-		}
-		catch (Exception ignored)
-		{
 		}
 
 		JScrollPane sc = new JScrollPane(waitlistTable);
@@ -1321,6 +1290,8 @@ public class PanelView extends PluginPanel
 
 		DefaultTableCellRenderer greyingRenderer = new DefaultTableCellRenderer()
 		{
+			private static final long serialVersionUID = 1L;
+
 			@Override
 			public java.awt.Component getTableCellRendererComponent(JTable table, Object value,
 			                                                        boolean isSelected, boolean hasFocus,
@@ -1336,25 +1307,21 @@ public class PanelView extends PluginPanel
 				return c;
 			}
 		};
-		try
+		int playerIdx = findMetricsColumnIndex("Player");
+		if (playerIdx >= 0)
 		{
-			int playerIdx = metricsTable.getColumnModel().getColumnIndex("Player");
 			metricsTable.getColumnModel().getColumn(playerIdx).setCellRenderer(greyingRenderer);
 		}
-		catch (IllegalArgumentException ignored)
+		int totalIdx = findMetricsColumnIndex("Total");
+		if (totalIdx >= 0)
 		{
-		}
-		try
-		{
-			int totalIdx = metricsTable.getColumnModel().getColumnIndex("Total");
 			metricsTable.getColumnModel().getColumn(totalIdx).setCellRenderer(greyingRenderer);
-		}
-		catch (IllegalArgumentException ignored)
-		{
 		}
 
 		DefaultTableCellRenderer splitRenderer = new DefaultTableCellRenderer()
 		{
+			private static final long serialVersionUID = 1L;
+
 			@Override
 			public java.awt.Component getTableCellRendererComponent(JTable table, Object value,
 			                                                        boolean isSelected, boolean hasFocus,
@@ -1378,26 +1345,33 @@ public class PanelView extends PluginPanel
 				return c;
 			}
 		};
-		try
+		int splitIdx = findMetricsColumnIndex("Split");
+		if (splitIdx >= 0)
 		{
-			int splitIdx = metricsTable.getColumnModel().getColumnIndex("Split");
 			metricsTable.getColumnModel().getColumn(splitIdx).setCellRenderer(splitRenderer);
 		}
-		catch (IllegalArgumentException ignored)
-		{
-		}
 
-		try
+		int actionIdx = findMetricsColumnIndex("X");
+		if (actionIdx >= 0)
 		{
-			int actionIdx = metricsTable.getColumnModel().getColumnIndex("X");
 			metricsTable.getColumnModel().getColumn(actionIdx)
 				.setCellRenderer(new RemoveButtonRenderer());
 			metricsTable.getColumnModel().getColumn(actionIdx)
 				.setCellEditor(new RemoveButtonEditor(this, sessionManager, metricsTable, actions));
 		}
-		catch (IllegalArgumentException ignored)
+	}
+
+	private int findMetricsColumnIndex(String name)
+	{
+		for (int i = 0; i < metricsTable.getColumnModel().getColumnCount(); i++)
 		{
+			Object header = metricsTable.getColumnModel().getColumn(i).getHeaderValue();
+			if (name.equals(header))
+			{
+				return i;
+			}
 		}
+		return -1;
 	}
 
 	private JComponent generateDirectPaymentsContent()
@@ -1406,11 +1380,13 @@ public class PanelView extends PluginPanel
 		List<PlayerMetrics> data = sessionManager.computeMetricsFor(currentSession, true);
 		List<Transfer> transfers = PaymentProcessor.computeDirectPaymentsStructured(data);
 
-		if (transfers != null && !transfers.isEmpty())
+		if (!transfers.isEmpty())
 		{
 			javax.swing.table.DefaultTableModel txModel =
 				new javax.swing.table.DefaultTableModel(new Object[]{"Suggested direct payments"}, 0)
 				{
+					private static final long serialVersionUID = 1L;
+
 					@Override
 					public boolean isCellEditable(int r, int c)
 					{
@@ -1420,8 +1396,8 @@ public class PanelView extends PluginPanel
 
 			for (Transfer t : transfers)
 			{
-				String payerShort = shortenName(t.getFrom(), 7);
-				String payeeShort = shortenName(t.getTo(), 7);
+				String payerShort = shortenDirectPaymentName(t.getFrom());
+				String payeeShort = shortenDirectPaymentName(t.getTo());
 				String amountStr = toSuffixString(Math.abs(t.getAmount()), config.defaultValueMultiplier().getValue());
 				String display = payerShort + " -> " + payeeShort + ": " + amountStr;
 				txModel.addRow(new Object[]{display});
@@ -1455,7 +1431,7 @@ public class PanelView extends PluginPanel
 	{
 		String payload = MarkdownFormatter.buildMetricsJson(sessionManager);
 		StringSelection selection = new StringSelection(payload);
-		java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+		Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
 	}
 
 	private void copyMetricsMarkdownToClipboard()
@@ -1463,7 +1439,7 @@ public class PanelView extends PluginPanel
 		String payload = MarkdownFormatter.buildMetricsMarkdown(
 			sessionManager.computeMetricsFor(getMetricsSession(), true), config);
 		StringSelection selection = new StringSelection(payload);
-		java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+		Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
 	}
 
 	private Session getMetricsSession()

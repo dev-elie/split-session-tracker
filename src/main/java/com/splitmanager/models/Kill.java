@@ -12,6 +12,8 @@ import lombok.Setter;
 @Setter
 public class Kill implements Serializable
 {
+	private static final long serialVersionUID = 1L;
+
 	public static final String TYPE_LOOT = "LOOT";
 	public static final String TYPE_JOINED = "JOINED";
 	public static final String TYPE_LEFT = "LEFT";

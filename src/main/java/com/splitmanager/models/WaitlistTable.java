@@ -1,25 +1,23 @@
 package com.splitmanager.models;
 
-import com.splitmanager.PluginConfig;
 import com.splitmanager.utils.Formats;
 import static com.splitmanager.utils.Formats.OsrsAmountFormatter.toSuffixString;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
 import javax.swing.table.AbstractTableModel;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class WaitlistTable extends AbstractTableModel
 {
+	private static final long serialVersionUID = 1L;
+
 	private final String[] cols = {"Type", "Value", "Player"};
 	private final List<PendingValue> rows = new ArrayList<>();
+	@Setter
 	private Runnable editListener;
-
-	public void setEditListener(Runnable editListener)
-	{
-		this.editListener = editListener;
-	}
 
 	public void setData(List<PendingValue> pending)
 	{
@@ -114,7 +112,7 @@ public class WaitlistTable extends AbstractTableModel
 			try
 			{
 				// Parse using default config multiplier if needed; null config will default inside formatter
-				long parsed = Formats.OsrsAmountFormatter.stringAmountToLongAmount(txt, (PluginConfig) null);
+				long parsed = Formats.OsrsAmountFormatter.stringAmountToLongAmount(txt, null);
 				pv.setValue(parsed);
 				fireTableCellUpdated(rowIndex, columnIndex);
 				notifyEdited();

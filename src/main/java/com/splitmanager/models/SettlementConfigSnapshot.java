@@ -11,14 +11,12 @@ import lombok.Setter;
 @Setter
 public class SettlementConfigSnapshot implements Serializable
 {
+	private static final long serialVersionUID = 1L;
+
 	private boolean accountForGeTax;
 	private String geTaxMinimumValue;
 	private double geTaxPercent;
 	private String geTaxMaxPerLoot;
-
-	public SettlementConfigSnapshot()
-	{
-	}
 
 	public SettlementConfigSnapshot(boolean accountForGeTax,
 	                                String geTaxMinimumValue,

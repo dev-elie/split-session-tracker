@@ -14,15 +14,11 @@ import net.runelite.client.ui.overlay.components.TitleComponent;
 @Setter
 public class ChatStatusOverlay extends OverlayPanel
 {
-
 	private boolean visible = false;
 	private boolean chatchanOn = false;
-	private boolean clanOn = false;
-	private boolean guestOn = false;
 
 	public ChatStatusOverlay()
 	{
-		setPosition(OverlayPosition.TOP_LEFT);
 		setPosition(OverlayPosition.TOP_LEFT);
 		setLayer(OverlayLayer.ABOVE_SCENE);
 	}
@@ -49,12 +45,6 @@ public class ChatStatusOverlay extends OverlayPanel
 		{
 			addStatusLine("Chat Channel", chatchanOn);
 		}
-/*		if (!clanOn)
-			addStatusLine("Clan Chat", clanOn);
-		if (!guestOn)
-			addStatusLine("Guest Chat", guestOn);
-		if (!countedOn)
-			addStatusLine("Counted Chat", countedOn);*/
 
 		return super.render(g);
 	}

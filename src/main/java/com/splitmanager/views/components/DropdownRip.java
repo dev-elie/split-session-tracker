@@ -32,16 +32,12 @@ import net.runelite.client.util.SwingUtil;
  */
 public class DropdownRip extends JPanel
 {
+	private static final long serialVersionUID = 1L;
 	private static final Dimension HEADER_CONTROL_SIZE = new Dimension(24, 24);
 
 	private final Header header;
 	private final JPanel contentHolder;
 	private boolean expanded;
-
-	public DropdownRip(String title, JComponent content)
-	{
-		this(title, content, true, null, null);
-	}
 
 	public DropdownRip(String title, JComponent content, boolean expanded)
 	{
@@ -97,6 +93,7 @@ public class DropdownRip extends JPanel
 
 	private final class Header extends JPanel
 	{
+		private static final long serialVersionUID = 1L;
 		private final ImageIcon SECTION_EXPAND_ICON;
 		private final ImageIcon SECTION_RETRACT_ICON;
 
@@ -130,7 +127,6 @@ public class DropdownRip extends JPanel
 			section.add(sectionHeader, BorderLayout.NORTH);
 
 			sectionToggle = new JButton(expanded ? SECTION_RETRACT_ICON : SECTION_EXPAND_ICON);
-			//sectionToggle = new JButton();
 			sectionToggle.setPreferredSize(new Dimension(18, 0));
 			sectionToggle.setBorder(new EmptyBorder(0, 0, 0, 0));
 			sectionToggle.setToolTipText(expanded ? "Retract" : "Expand");

@@ -13,6 +13,8 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public final class RecentSplitsTable extends javax.swing.table.AbstractTableModel
 {
+	private static final long serialVersionUID = 1L;
+
 	private static final String[] COLS = {"Time", "Player", "Amount", "Tax"};
 	private static final java.time.ZoneId SYS_TZ = java.time.ZoneId.systemDefault();
 	private final java.util.List<Row> rows = new java.util.ArrayList<>(10);
@@ -293,11 +295,9 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 			fireTableDataChanged();
 			return;
 		}
-		int n = kills.size();
 		// Iterate from oldest to newest
-		for (int i = 0; i < n; i++)
+		for (Kill k : kills)
 		{
-			Kill k = kills.get(i);
 			addEntry(k);
 		}
 		fireTableDataChanged();

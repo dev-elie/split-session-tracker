@@ -45,6 +45,8 @@ import lombok.Setter;
 @Getter
 public class Session implements Serializable
 {
+	private static final long serialVersionUID = 1L;
+
 	/**
 	 * Unique identifier for this segment (UUID string). Used as the key in persistence and lookup.
 	 */

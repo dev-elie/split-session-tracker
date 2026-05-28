@@ -22,8 +22,6 @@ import java.awt.GridLayout;
 import java.awt.image.BufferedImage;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
-import java.awt.datatransfer.UnsupportedFlavorException;
-import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -50,6 +48,7 @@ import javax.swing.ListSelectionModel;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.TableCellEditor;
 import javax.swing.table.TableCellRenderer;
+import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.util.ImageUtil;
@@ -58,6 +57,8 @@ import net.runelite.client.util.SwingUtil;
 @Slf4j
 public class PopoutView extends PanelView
 {
+	private static final long serialVersionUID = 1L;
+
 	private static final int GRAPH_REFRESH_INTERVAL_MS = 60_000;
 	private static final Dimension LEFT_PANE_PREFERRED_SIZE = new Dimension(330, 600);
 	private static final Dimension LEFT_PANE_MINIMUM_SIZE = new Dimension(180, 0);
@@ -73,7 +74,7 @@ public class PopoutView extends PanelView
 	private JLabel topPlayerValue;
 	private final Timer graphRefreshTimer = new Timer(GRAPH_REFRESH_INTERVAL_MS, e -> refreshGraph());
 	private boolean editMode = false;
-	private JComponent editContainer;
+	private JPanel editContainer;
 
 	private JPanel dashboardContainer;
 
@@ -84,11 +85,6 @@ public class PopoutView extends PanelView
 
 		buildPopoutLayout();
 		refreshGraph();
-	}
-
-	public JButton getToggleEditButton()
-	{
-		return btnToggleEdit;
 	}
 
 	public void setEditMode(boolean editMode)
@@ -168,7 +164,7 @@ public class PopoutView extends PanelView
 		dashboardContainer.repaint();
 	}
 
-	private JComponent buildEditDashboard()
+	private JPanel buildEditDashboard()
 	{
 		JPanel panel = new JPanel(new BorderLayout(0, 8));
 		panel.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 0));
@@ -220,6 +216,8 @@ public class PopoutView extends PanelView
 
 	private class HistoryTableModel extends AbstractTableModel
 	{
+		private static final long serialVersionUID = 1L;
+
 		private static final int DELETE_COLUMN = 4;
 		private List<Kill> kills = new ArrayList<>();
 		private final String[] columns = {"Time", "Player", "Amount", "Type", "X"};
@@ -236,14 +234,6 @@ public class PopoutView extends PanelView
 			kills = new ArrayList<>(sessionManager.getAllKills());
 			clearPendingRosterDelete();
 			fireTableDataChanged();
-		}
-
-		boolean requiresRosterDeleteConfirmation(int rowIndex)
-		{
-			Kill selected = getKillAt(rowIndex).orElse(null);
-			return selected != null
-				&& Kill.TYPE_JOINED.equalsIgnoreCase(selected.getType())
-				&& findLinkedRosterEventRow(rowIndex) >= 0;
 		}
 
 		boolean isPendingRosterDelete(int rowIndex)
@@ -284,7 +274,7 @@ public class PopoutView extends PanelView
 			}
 			if (Kill.TYPE_JOINED.equalsIgnoreCase(selected.getType()))
 			{
-				return findNextRosterEvent(rowIndex, selected.getPlayer(), Kill.TYPE_LEFT);
+				return findNextLeftRosterEvent(rowIndex, selected.getPlayer());
 			}
 			return -1;
 		}
@@ -312,14 +302,14 @@ public class PopoutView extends PanelView
 			return false;
 		}
 
-		private int findNextRosterEvent(int rowIndex, String player, String targetType)
+		private int findNextLeftRosterEvent(int rowIndex, String player)
 		{
 			for (int i = rowIndex + 1; i < kills.size(); i++)
 			{
 				Kill candidate = kills.get(i);
 				if (samePlayer(player, candidate.getPlayer()) && candidate.isRosterEvent())
 				{
-					return targetType.equalsIgnoreCase(candidate.getType()) ? i : -1;
+					return Kill.TYPE_LEFT.equalsIgnoreCase(candidate.getType()) ? i : -1;
 				}
 			}
 			return -1;
@@ -327,7 +317,7 @@ public class PopoutView extends PanelView
 
 		private boolean samePlayer(String first, String second)
 		{
-			return first != null && second != null && first.equalsIgnoreCase(second);
+			return first != null && first.equalsIgnoreCase(second);
 		}
 
 		java.util.Optional<Kill> getKillAt(int rowIndex)
@@ -391,15 +381,18 @@ public class PopoutView extends PanelView
 			Kill k = kills.get(rowIndex);
 			if (columnIndex == 1)
 			{
-				k.setPlayer(aValue.toString());
+				k.setPlayer(aValue == null ? "" : aValue.toString());
 			}
 			else if (columnIndex == 2)
 			{
 				try
 				{
-					k.setAmount(Long.parseLong(aValue.toString()));
+					k.setAmount(Long.parseLong(aValue == null ? "" : aValue.toString()));
 				}
-				catch (NumberFormatException ignored) {}
+				catch (NumberFormatException e)
+				{
+					log.warn("Invalid history amount '{}' at row {}", aValue, rowIndex, e);
+				}
 			}
 			sessionManager.markHistoryMutation();
 			controller.refreshAllView();
@@ -430,6 +423,8 @@ public class PopoutView extends PanelView
 
 	private class DeleteButtonEditor extends AbstractCellEditor implements TableCellEditor
 	{
+		private static final long serialVersionUID = 1L;
+
 		private final JButton button = createDeleteButton();
 		private final HistoryTableModel model;
 		private int row = -1;
@@ -544,6 +539,8 @@ public class PopoutView extends PanelView
 
 	private static class ScrollableSidebarPanel extends JPanel implements Scrollable
 	{
+		private static final long serialVersionUID = 1L;
+
 		@Override
 		public Dimension getPreferredScrollableViewportSize()
 		{
@@ -640,21 +637,21 @@ public class PopoutView extends PanelView
 
 	private void refreshHistoryEditor()
 	{
-		if (editContainer == null) return;
-		if (editContainer instanceof JPanel)
+		if (editContainer == null)
 		{
-			for (Component c : ((JPanel) editContainer).getComponents())
+			return;
+		}
+		for (Component c : editContainer.getComponents())
+		{
+			if (c instanceof JScrollPane)
 			{
-				if (c instanceof JScrollPane)
+				JScrollPane scroll = (JScrollPane) c;
+				if (scroll.getViewport().getView() instanceof JTable)
 				{
-					JScrollPane scroll = (JScrollPane) c;
-					if (scroll.getViewport().getView() instanceof JTable)
+					JTable table = (JTable) scroll.getViewport().getView();
+					if (table.getModel() instanceof HistoryTableModel)
 					{
-						JTable table = (JTable) scroll.getViewport().getView();
-						if (table.getModel() instanceof HistoryTableModel)
-						{
-							((HistoryTableModel) table.getModel()).refresh();
-						}
+						((HistoryTableModel) table.getModel()).refresh();
 					}
 				}
 			}
@@ -719,6 +716,8 @@ public class PopoutView extends PanelView
 
 	private class HistoryTransferHandler extends TransferHandler
 	{
+		private static final long serialVersionUID = 1L;
+
 		private final HistoryTableModel model;
 
 		HistoryTransferHandler(HistoryTableModel model)
@@ -753,7 +752,8 @@ public class PopoutView extends PanelView
 				}
 
 				@Override
-				public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException
+				@Nonnull
+				public Object getTransferData(DataFlavor flavor)
 				{
 					return String.valueOf(index);
 				}
