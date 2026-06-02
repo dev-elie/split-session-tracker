@@ -92,14 +92,14 @@ tasks.register('run', JavaExec) {
 	group = 'runelite'
 	description = 'Run RuneLite with Auto Split Manager loaded in developer mode.'
 	classpath = sourceSets.test.runtimeClasspath
-	mainClass.set('com.splitmanager.ExamplePluginTest')
+	mainClass.set('com.splitmanager.PluginTest')
 	args '--developer-mode', '--debug'
 }
 
 tasks.register('shadowJar', Jar) {
 	dependsOn configurations.testRuntimeClasspath
 	manifest {
-		attributes('Main-Class': 'com.splitmanager.ExamplePluginTest', 'Multi-Release': true)
+		attributes('Main-Class': 'com.splitmanager.PluginTest', 'Multi-Release': true)
 	}
 
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
