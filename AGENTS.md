@@ -1,4 +1,172 @@
-# Agent Notes
+# RuneLite Plugin Development — Agent Guidelines
+
+Source: https://github.com/runelite/example-plugin/blob/master/AGENTS.md
+
+## Logging
+
+- Use `log.debug()` for developer/diagnostic logging.
+- Do not use `log.info` for per-frame or per-event logging - RuneLite runs at INFO level in production, so high-frequency info logs will pollute user logs. `log.info()` is fine for one-time startup/shutdown messages or infrequent events.
+
+## Threading & Concurrency
+
+- Never use `Thread.sleep()`.
+- Never block on `shutDown()` or `startUp()` - don't call `executor.awaitTermination()` in shutdown, just use `shutdownNow()`.
+- Never do blocking network IO or disk IO on the client thread. The OkHttp thread pool can be used for blocking network requests.
+  If you need to call back into `client` from the okhttp threadpool, such as from the response queued with `enqueue()`, use `clientThread.invoke()`
+- Explicitly cancel scheduled tasks (e.g. `ScheduledFuture`) on shutdown, in addition to shutting down the executor.
+- For batching async work, use `CompletableFuture.allOf()` - not `CountDownLatch`.
+- If you must use `Process.waitFor()`, always pass a reasonable timeout.
+
+## Performance
+
+- Don't scan the entire scene every tick or frame. Use events such as object and npc (de)spawn to track what you care about and maintain your own collection.
+- Keep the computations in Overlays, which are run each frame, to a minimum.
+
+## API Usage
+
+- Use `net.runelite.api.gameval` package constants - `ItemID`, `InterfaceID`, `ObjectID`, etc. Never hardcode magic numbers when gameval constants can be used instead.
+- Use `LinkBrowser` to open URLs, not `java.awt.Desktop`
+- When looking up Widgets, pass the component ID from gamevals (eg `client.getWidget(InterfaceID.DomEndLevelUi.LOOT_VALUE)`) - do not manually combine interface + component child IDs.
+- Use of Java reflection is forbidden.
+
+## HTTP & JSON
+
+- Use OkHttp for all HTTP requests. `@Inject OkHttpClient` to get the HTTP client. Do not use `HttpURLConnection`, `java.net.http.HttpClient`, or Apache HttpClient.
+- Use `@Inject Gson` to get a Gson instead, never create your own from scratch. You can use `.newBuilder()` to create one derived from the base `Gson.`
+- Do not add transitive dependencies from `runelite-client` directly to `build.gradle`, such as gson, guice, or okhttp.
+- Never execute okhttp calls on the client thread. Prefer using `enqueue()` which places the request on the okhttp threadpool.
+
+## File I/O
+
+- Only read/write files inside the `.runelite` directory. Create a subdirectory for your plugin (e.g. `.runelite/your-plugin-name/`) if you need to store data on disk.
+- Use `RuneLite.RUNELITE_DIR` to get the path.
+- Alternatively, use `JFileChooser` for user-initiated file operations.
+
+## Config
+
+- Config group names must be specific - e.g. `"deadman-prices"`, not `"deadman"`.
+- Never rename a config key or config group without providing a migration. Renaming silently resets users' saved settings.
+- If you add a `@ConfigItem` that toggles a feature involving a third-party server, it must:
+  - Be **disabled by default** (opt-in)
+  - Have a `warning` field set to: `"This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers"`
+
+## Plugin Setup & Packaging
+
+- Rename everything from the template. Do not leave `com.example`, `ExamplePlugin`, `ExampleConfig`, or `example` as the config group. Rename the package path, class names, config group, `build.gradle` group, `settings.gradle` project name, and `runelite-plugin.properties`.
+- Do not include a `META-INF/services/net.runelite.client.plugins.Plugin` file.
+- Do not commit build artifacts - no `.class` files, `out/` directories, or `.tmp` directories.
+- `build.gradle` must target Java 11 and match the structure of the example-plugin template.
+- Retain a permissive license, such as BSD-2.
+
+## Resources & Assets
+
+- Optimize icon PNGs. Java loads images at full resolution in memory (`width x height x 4` bytes), so a seemingly small file can use significant memory.
+- Ensure PNGs are actually PNGs - do not rename JPEGs or ICOs to `.png`.
+
+## Cleanup
+
+- Remove unused config classes, fields, and imports.
+- Clean up subscriptions, listeners, and overlays in `shutDown()`.
+- Do not mix code reformatting with feature changes in the same commit - it makes diffs unreadable for reviewers.
+
+## Testing
+
+You cannot verify plugin behavior yourself. Even if you have screen-capture or computer-use tools available, **do not use them to interact with RuneScape** - automating game input violates Jagex's third-party client guidelines and will get the user's account banned. Only the user can confirm a plugin works in-game.
+
+After completing a task, do not declare it done. Instead:
+
+1. Offer to launch RuneLite for the user by running `./gradlew run` from the plugin's root directory.
+2. Instruct the user to follow the "Using Jagex Accounts" instructions found at https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts to login to the development client.
+3. Tell the user *what to test* - the specific behavior you changed, the golden path, and any edge cases worth exercising.
+4. Wait for the user to confirm the feature works in-game before considering the task complete. A clean JVM start is not a passing test.
+
+---
+
+# Plugin Rules & Restrictions
+
+Features that are **forbidden or restricted** in RuneLite hub plugins.
+Sourced from [Jagex's Third-Party Client Guidelines](https://secure.runescape.com/m=news/third-party-client-guidelines?oldschool=1) and RuneLite's [Rejected or Rolled-Back Features](https://github.com/runelite/runelite/wiki/Rejected-or-Rolled-Back-Features).
+
+**If your plugin does any of the things listed below, it will be rejected.**
+
+## Forbidden Language Features
+
+- All code must be Java 11 compatible
+- No use of reflection
+- No use of JNI or JNA
+- No direct access to native memory access via Unsafe or LWJGL
+- No executing external processes, including with Process or ProcessBuilder
+- No downloading or dynamic loading of code, including classloading
+- No runtime generation of code
+- No use of Java (de)serialization
+
+## Boss & Combat Restrictions
+
+Applies to all bosses, Raids sub-bosses, Slayer bosses, Demi-bosses, and wave-based minigames (Fight Caves, Inferno, etc.):
+
+- No next-attack prediction (timing or attack style)
+- No projectile target/landing indicators
+- No prayer switching indicators
+- No attack counters
+- No automatic indicators showing where to stand or not stand (manual tile marking is allowed)
+- No additional visual or audio indicators of a boss mechanic, unless it is a manually triggered external helper
+- No advance warning of future hazards (highlighting currently active hazards is OK)
+- No "flinch" timing helpers
+- No combat prayer recommendations
+- No NPC focus identification (which player the NPC is targeting)
+- No content simulation (e.g. boss fight simulators)
+
+New high-end PvM boss plugins are not accepted as a blanket policy.
+
+## PvP Restrictions
+
+- No removing or deprioritising attack/cast options in PvP
+- No opponent freeze duration indicators
+- No PvP clan opponent identification
+- No PvP loot drop previews
+- No identifying an opponent's opponent
+- No PvP target scouting information
+- No player group summaries (attackable counts, prayer usage, etc.)
+- No level-based PvP player indicators (highlighting attackable players or those within level range)
+- No spell targeting simplification (removing menu options to make targeting easier)
+
+## Menu Restrictions
+
+- No adding new menu entries that cause actions to be sent to the server
+- No menu modifications for Construction
+- No menu modifications for Blackjacking
+- No conditional menu entry removal based on NPC type, friend status, etc. (can be overpowered)
+
+## Interface Restrictions
+
+- No unhiding hidden interface components (special attack bar, minimap)
+- No moving or resizing click zones for 3D components
+- No moving or resizing click zones for combat options, inventory, equipment, or spellbook
+- No resizing prayer book click zones
+- No resizing spellbook components
+- No removing inventory pane background or making it click-through
+- No detached camera world interaction (interacting with the game world from a camera position that isn't the player's)
+
+## Input Restrictions
+
+- No injecting input events, including mouse and keyboard events
+- No autotyping - plugins must not programmatically insert text into the chatbox input (includes pasting, shorthand expansion)
+- No modifying outgoing chat messages after the user sends them
+
+## Data & Privacy Restrictions
+
+- No exposing player information over HTTP
+- No crowdsourcing data about other players (locations, gear, names, etc.)
+- No credential manager plugins that stores account credentials
+
+## Content Restrictions
+
+- No adult or overtly sexual content
+- No plugins that use player-provided IDs for their entire functionality (causes moderation issues)
+
+---
+
+# Auto Split Manager Notes
 
 ## Project Overview
 
@@ -10,7 +178,7 @@ The plugin entry point is `com.splitmanager.ManagerPlugin`, declared in `runelit
 
 - `./gradlew test` runs the JUnit 4 test suite.
 - `./gradlew build` compiles and runs tests.
-- `./gradlew shadowJar` builds a runnable RuneLite test jar using `com.example.ExamplePluginTest`.
+- `./gradlew shadowJar` builds a runnable RuneLite test jar using `com.splitmanager.ExamplePluginTest`.
 - The project targets Java 11 in Gradle, even if local IDE/Qodana uses a newer JDK.
 - On this workstation, use Java 21 for Gradle because Lombok `1.18.30` does not compile under Java 25:
   `env JAVA_HOME=/usr/lib/jvm/java-21-temurin-jdk ./gradlew test`
@@ -44,7 +212,8 @@ Work toward these over time:
 - `ManagerPanel` is the composition root for the sidebar UI. It creates `PanelController` and `PanelView`, and can rebuild the panel after certain config changes.
 - `PanelController` owns Swing event handling and UI refresh orchestration. View mutations should generally flow through controller methods.
 - `PanelView` is the Swing `PluginPanel`. Keep it mostly passive: render UI, expose components/models, and forward user actions through `PanelActions`.
-- `ManagerSession` owns sessions, pending values, split math, roster changes, persistence of session JSON, and the current active session id.
+- `ManagerSession` owns sessions, pending values, split math, roster changes, and the current active session id.
+- `persistence/SessionStorage.java` owns the versioned per-profile session JSON file and migration from legacy hidden config keys.
 - `ManagerKnownPlayers` owns known players plus alt-to-main mappings, persisted through hidden config values.
 - `models/*Table.java` classes are Swing table models. `PlayerMetrics`, `Session`, `Kill`, `PendingValue`, and `Transfer` are the core data records.
 - `utils/Formats.java`, `MarkdownFormatter.java`, and `PaymentProcessor.java` contain shared parsing/formatting/settlement logic.
@@ -77,12 +246,15 @@ Detected values become `PendingValue` entries unless `autoApplyWhenInSession()` 
 
 ## Persistence
 
-RuneLite `PluginConfig` is used as the backing store:
+Session data uses a versioned per-profile JSON file:
 
-- `sessionsJson` stores all `Session` objects as JSON.
-- `currentSessionId` stores the active child session id.
-- `PlayersCsv` stores known players.
-- `altsJson` stores alt-to-main mappings.
+- `SessionStorage` writes `~/.runelite/auto-split-manager/{profileName}-{profileId}.auto-split-manager.sessions.json`.
+- The file stores `schemaVersion`, `sessions`, `currentSessionId`, and `historyLoaded`.
+- `schemaVersion` is currently `1`.
+- On startup, if the file does not exist, legacy hidden config keys `sessionsJson`, `currentSessionId`, and `historyLoaded` are migrated into the file.
+- Legacy session config keys are cleared only after the new file write succeeds.
+- `PlayersCsv` still stores known players through hidden config.
+- `altsJson` still stores alt-to-main mappings through hidden config.
 - `InstantTypeAdapter` must be registered on Gson instances that serialize session/player data containing `Instant`.
 
 Avoid changing hidden config key names unless you also plan a migration path.
@@ -125,6 +297,7 @@ Use `src/test/java` for automated unit tests and keep the full RuneLite client l
 - Prefer real domain objects and mocked RuneLite/client objects. Unit tests should not start RuneLite, log into OSRS, hit the network, require graphics, or depend on the user's RuneLite config directory.
 - Stub config values explicitly. Mockito will not reliably exercise interface default methods unless configured to call real methods.
 - Use a real `Gson` configured with `InstantTypeAdapter` when testing persistence or session JSON.
+- For session persistence tests, prefer `SessionStorage` with `TemporaryFolder` so tests do not touch the user's RuneLite profile directory.
 - Keep tests deterministic: avoid assertions based on wall-clock timestamps, random UUID values, Swing focus, table row selection side effects, or map ordering unless the ordering is part of the contract.
 - Assert raw amounts in coins. Use formatted strings only when testing formatter/table output.
 - For split math, assert both totals and split sign. Negative split means payer/owes; positive split means receiver/is owed.
@@ -139,13 +312,13 @@ RuneLite-specific testing layers:
 - **Domain unit tests:** `ManagerSession`, `ManagerKnownPlayers`, `Formats`, `PaymentProcessor`, and `MarkdownFormatter`. These should be the default for most changes.
 - **Boundary unit tests:** `ManagerPlugin` event handlers with mocked config/session/panel dependencies and synthetic RuneLite events.
 - **View/model tests:** Swing table models and formatting behavior without starting the RuneLite client.
-- **Manual smoke test:** `com.example.ExamplePluginTest` loads `ManagerPlugin` via `ExternalPluginManager.loadBuiltin(...)` and launches RuneLite. Treat this as a manual development-client path, not an automated unit test.
+- **Manual smoke test:** `com.splitmanager.ExamplePluginTest` loads `ManagerPlugin` via `ExternalPluginManager.loadBuiltin(...)` and launches RuneLite. Treat this as a manual development-client path, not an automated unit test.
 
 Best setup for this RuneLite external plugin:
 
 - Keep `testImplementation 'junit:junit:4.12'`, Mockito, `net.runelite:client`, and `net.runelite:jshell`.
 - Keep automated verification on `./gradlew test`.
-- Consider adding the official-template `run` Gradle task if local manual smoke testing is needed often. It should use `sourceSets.test.runtimeClasspath`, `com.example.ExamplePluginTest`, and pass `--developer-mode`/`--debug`.
+- The `run` Gradle task uses `sourceSets.test.runtimeClasspath`, `com.splitmanager.ExamplePluginTest`, and passes `--developer-mode`/`--debug`.
 - Run tests with a Java 11 JDK. A JRE-only install is not enough because Gradle needs `javac`.
 
 Research references:
@@ -158,8 +331,6 @@ Research references:
 ## Current Cautions
 
 - The repository may contain local uncommitted changes; check `git status --short` before editing and do not revert unrelated user work.
-- There is an older `com.example.ExamplePluginTest` launcher even though the plugin package is `com.splitmanager`.
-- `settings.gradle` still names the root project `example`.
 - Some TODOs are intentional placeholders, including JSON export methods and direct payment UI limitations.
 - `ManagerSession.stopSession` displays a `JOptionPane`, which makes complete unit testing awkward in headless tests.
 - Be careful around `ManagerSession.sessionHasPlayer`; callers should avoid passing a null session.
