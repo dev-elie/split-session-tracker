@@ -39,8 +39,8 @@ import lombok.Setter;
  * - Stopping a thread ends the active child, and if the mother is still open, it is ended too.
  * <p>
  * Persistence/serialization
- * - This model is Gson-serializable; ManagerSession persists an array of Session objects in the
- * PluginConfig as JSON. Instant fields are serialized via a custom adapter.
+ * - This model is Gson-serializable; SessionStorage persists session data as versioned JSON in
+ * the plugin's per-profile .runelite directory. Instant fields are serialized via a custom adapter.
  */
 @Getter
 public class Session implements Serializable
