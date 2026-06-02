@@ -31,8 +31,8 @@ import static org.junit.Assert.fail;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.runner.RunWith;
 import org.junit.rules.TemporaryFolder;
+import org.junit.runner.RunWith;
 import static org.mockito.ArgumentMatchers.anyString;
 import org.mockito.Mock;
 import static org.mockito.Mockito.atLeastOnce;
@@ -48,6 +48,8 @@ public class ManagerSessionTest
 	private final Gson gson = new Gson().newBuilder()
 		.registerTypeAdapter(Instant.class, new InstantTypeAdapter())
 		.create();
+	@Rule
+	public TemporaryFolder temporaryFolder = new TemporaryFolder();
 	@Mock
 	private PluginConfig config;
 	@Mock
@@ -55,8 +57,6 @@ public class ManagerSessionTest
 	@Mock
 	private ManagerPlugin pluginManager;
 	private ManagerSession managerSession;
-	@Rule
-	public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
 	@Before
 	public void setUp()
@@ -1140,12 +1140,12 @@ public class ManagerSessionTest
 		assertTrue(joinedIndex >= 0);
 		assertTrue(leftIndex >= 0);
 
-			managerSession.removeKillsAt(Arrays.asList(joinedIndex, leftIndex));
+		managerSession.removeKillsAt(Arrays.asList(joinedIndex, leftIndex));
 
-			Session current = requireSession(managerSession.getCurrentSession());
-			assertFalse(managerSession.getAllKills().stream().anyMatch(kill ->
-				"Player2".equalsIgnoreCase(kill.getPlayer()) && kill.isRosterEvent()));
-		}
+		Session current = requireSession(managerSession.getCurrentSession());
+		assertFalse(managerSession.getAllKills().stream().anyMatch(kill ->
+			"Player2".equalsIgnoreCase(kill.getPlayer()) && kill.isRosterEvent()));
+	}
 
 	@Test
 	public void testInsertAndMoveKillEdgeCases()
@@ -1211,14 +1211,14 @@ public class ManagerSessionTest
 		assertEquals(0, managerSession.importHistorySessionsJson("   "));
 		assertEquals(0, managerSession.importHistorySessionsJson(gson.toJson(new Session[]{})));
 
-			Session root = new Session("root", Instant.EPOCH, null);
-			root.setEnd(Instant.EPOCH.plusSeconds(1));
-			Session child = new Session("child", Instant.EPOCH.plusSeconds(2), "root");
-			child.setEnd(Instant.EPOCH.plusSeconds(3));
-			Session duplicateIdRoot = new Session("root", Instant.EPOCH.plusSeconds(4), null);
-			duplicateIdRoot.setEnd(Instant.EPOCH.plusSeconds(5));
-			assertEquals(0, managerSession.importHistorySessionsJson(gson.toJson(new Session[]{root, duplicateIdRoot})));
-			assertEquals(0, managerSession.importHistorySessionsJson(gson.toJson(new Session[]{child})));
+		Session root = new Session("root", Instant.EPOCH, null);
+		root.setEnd(Instant.EPOCH.plusSeconds(1));
+		Session child = new Session("child", Instant.EPOCH.plusSeconds(2), "root");
+		child.setEnd(Instant.EPOCH.plusSeconds(3));
+		Session duplicateIdRoot = new Session("root", Instant.EPOCH.plusSeconds(4), null);
+		duplicateIdRoot.setEnd(Instant.EPOCH.plusSeconds(5));
+		assertEquals(0, managerSession.importHistorySessionsJson(gson.toJson(new Session[]{root, duplicateIdRoot})));
+		assertEquals(0, managerSession.importHistorySessionsJson(gson.toJson(new Session[]{child})));
 
 		when(playerManager.getKnownMains()).thenReturn(null);
 		assertTrue(managerSession.getKnownPlayers().isEmpty());

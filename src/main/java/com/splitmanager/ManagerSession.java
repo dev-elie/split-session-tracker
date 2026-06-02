@@ -65,7 +65,7 @@ public class ManagerSession
 	 */
 	@Inject
 	public ManagerSession(PluginConfig config, ManagerKnownPlayers playerManager, ManagerPlugin pluginManager, Gson gson,
-		SessionStorage sessionStorage)
+	                      SessionStorage sessionStorage)
 	{
 		this.config = config;
 		this.playerManager = playerManager;
