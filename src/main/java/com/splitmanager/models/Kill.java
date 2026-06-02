@@ -1,6 +1,5 @@
 package com.splitmanager.models;
 
-import java.io.Serializable;
 import java.time.Instant;
 import lombok.Getter;
 import lombok.Setter;
@@ -10,12 +9,11 @@ import lombok.Setter;
  */
 @Getter
 @Setter
-public class Kill implements Serializable
+public class Kill
 {
 	public static final String TYPE_LOOT = "LOOT";
 	public static final String TYPE_JOINED = "JOINED";
 	public static final String TYPE_LEFT = "LEFT";
-	private static final long serialVersionUID = 1L;
 	private final String sessionId;
 	private final Instant at;
 	private String player;

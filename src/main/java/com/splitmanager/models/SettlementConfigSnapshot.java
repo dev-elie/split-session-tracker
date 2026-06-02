@@ -1,6 +1,5 @@
 package com.splitmanager.models;
 
-import java.io.Serializable;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -9,10 +8,8 @@ import lombok.Setter;
  */
 @Getter
 @Setter
-public class SettlementConfigSnapshot implements Serializable
+public class SettlementConfigSnapshot
 {
-	private static final long serialVersionUID = 1L;
-
 	private boolean accountForGeTax;
 	private String geTaxMinimumValue;
 	private double geTaxPercent;

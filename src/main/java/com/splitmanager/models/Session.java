@@ -1,6 +1,5 @@
 package com.splitmanager.models;
 
-import java.io.Serializable;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -43,10 +42,8 @@ import lombok.Setter;
  * the plugin's per-profile .runelite directory. Instant fields are serialized via a custom adapter.
  */
 @Getter
-public class Session implements Serializable
+public class Session
 {
-	private static final long serialVersionUID = 1L;
-
 	/**
 	 * Unique identifier for this segment (UUID string). Used as the key in persistence and lookup.
 	 */
