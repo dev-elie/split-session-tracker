@@ -178,7 +178,7 @@ The plugin entry point is `com.splitmanager.ManagerPlugin`, declared in `runelit
 
 - `./gradlew test` runs the JUnit 4 test suite.
 - `./gradlew build` compiles and runs tests.
-- `./gradlew shadowJar` builds a runnable RuneLite test jar using `com.splitmanager.ExamplePluginTest`.
+- `./gradlew shadowJar` builds a runnable RuneLite test jar using `com.splitmanager.PluginTest`.
 - The project targets Java 11 in Gradle, even if local IDE/Qodana uses a newer JDK.
 - On this workstation, use Java 21 for Gradle because Lombok `1.18.30` does not compile under Java 25:
   `env JAVA_HOME=/usr/lib/jvm/java-21-temurin-jdk ./gradlew test`
@@ -312,13 +312,13 @@ RuneLite-specific testing layers:
 - **Domain unit tests:** `ManagerSession`, `ManagerKnownPlayers`, `Formats`, `PaymentProcessor`, and `MarkdownFormatter`. These should be the default for most changes.
 - **Boundary unit tests:** `ManagerPlugin` event handlers with mocked config/session/panel dependencies and synthetic RuneLite events.
 - **View/model tests:** Swing table models and formatting behavior without starting the RuneLite client.
-- **Manual smoke test:** `com.splitmanager.ExamplePluginTest` loads `ManagerPlugin` via `ExternalPluginManager.loadBuiltin(...)` and launches RuneLite. Treat this as a manual development-client path, not an automated unit test.
+- **Manual smoke test:** `com.splitmanager.PluginTest` loads `ManagerPlugin` via `ExternalPluginManager.loadBuiltin(...)` and launches RuneLite. Treat this as a manual development-client path, not an automated unit test.
 
 Best setup for this RuneLite external plugin:
 
 - Keep `testImplementation 'junit:junit:4.12'`, Mockito, `net.runelite:client`, and `net.runelite:jshell`.
 - Keep automated verification on `./gradlew test`.
-- The `run` Gradle task uses `sourceSets.test.runtimeClasspath`, `com.splitmanager.ExamplePluginTest`, and passes `--developer-mode`/`--debug`.
+- The `run` Gradle task uses `sourceSets.test.runtimeClasspath`, `com.splitmanager.PluginTest`, and passes `--developer-mode`/`--debug`.
 - Run tests with a Java 11 JDK. A JRE-only install is not enough because Gradle needs `javac`.
 
 Research references:
