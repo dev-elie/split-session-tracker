@@ -6,6 +6,8 @@ import com.splitmanager.models.PendingValue;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.Session;
 import com.splitmanager.models.SettlementConfigSnapshot;
+import com.splitmanager.persistence.SessionStorage;
+import com.splitmanager.persistence.SessionStorageData;
 import com.splitmanager.sessions.SplitCalculator;
 import com.splitmanager.utils.Formats;
 import com.splitmanager.utils.InstantTypeAdapter;
@@ -43,6 +45,7 @@ public class ManagerSession
 	private final ManagerKnownPlayers playerManager;
 	private final PluginConfig config;
 	private final ManagerPlugin pluginManager;
+	private final SessionStorage sessionStorage;
 	private final SplitCalculator splitCalculator;
 	// Cache of all kills grouped by mother session id to avoid recomputing on every UI refresh
 	private final Map<String, List<Kill>> motherKillsCache = new LinkedHashMap<>();
@@ -55,13 +58,14 @@ public class ManagerSession
 	private boolean historyLoaded;
 
 	/**
-	 * Construct a new ManagerSession bound to the given PluginConfig.
-	 * This instance owns all in-memory session state and persists it via the config.
+	 * Construct a new ManagerSession bound to the session storage.
+	 * This instance owns all in-memory session state and persists it via a versioned JSON file.
 	 *
 	 * @param config backing configuration/store used to load and save state
 	 */
 	@Inject
-	public ManagerSession(PluginConfig config, ManagerKnownPlayers playerManager, ManagerPlugin pluginManager, Gson gson)
+	public ManagerSession(PluginConfig config, ManagerKnownPlayers playerManager, ManagerPlugin pluginManager, Gson gson,
+		SessionStorage sessionStorage)
 	{
 		this.config = config;
 		this.playerManager = playerManager;
@@ -70,15 +74,13 @@ public class ManagerSession
 			.registerTypeAdapter(Instant.class, new InstantTypeAdapter())
 			.create();
 		this.pluginManager = pluginManager;
+		this.sessionStorage = sessionStorage;
 		this.splitCalculator = new SplitCalculator();
 	}
 
-	/**
-	 * Utility: convert null to empty string for config storage.
-	 */
-	private static String nullToEmpty(String s)
+	public ManagerSession(PluginConfig config, ManagerKnownPlayers playerManager, ManagerPlugin pluginManager, Gson gson)
 	{
-		return s == null ? "" : s;
+		this(config, playerManager, pluginManager, gson, SessionStorage.legacyConfig(config, gson));
 	}
 
 	/**
@@ -411,12 +413,12 @@ public class ManagerSession
 	}
 
 	/**
-	 * Loads configuration data into the application's runtime structures.
+	 * Loads persisted session data into the application's runtime structures.
 	 * <p>
 	 * This method performs the following operations:
 	 * <p>
 	 * 1. Clears the session map and populates it with sessions retrieved from a
-	 * JSON array in the configuration. Each session is parsed and added to
+	 * versioned JSON document. Each session is parsed and added to
 	 * the map by its ID.
 	 * <p>
 	 * 2. Updates the current session ID and clears it when the persisted id
@@ -425,58 +427,74 @@ public class ManagerSession
 	public void loadFromConfig()
 	{
 		sessions.clear();
-		String json = config.sessionsJson();
-		if (json != null && !json.isEmpty())
+		SessionStorageData data = loadPersistedData();
+		for (Session s : data.getSessions())
 		{
-			try
+			if (s != null && s.getId() != null)
 			{
-				Session[] arr = gson.fromJson(json, Session[].class);
-				if (arr != null)
-				{
-					for (Session s : arr)
-					{
-						if (s != null && s.getId() != null)
-						{
-							sessions.put(s.getId(), s);
-						}
-					}
-				}
-			}
-			catch (Exception e)
-			{
-				log.warn("Failed to load sessions from config JSON", e);
+				sessions.put(s.getId(), s);
 			}
 		}
 
 		// Invalidate any cached mother->kills when loading fresh data
 		motherKillsCache.clear();
 
-		currentSessionId = emptyToNull(config.currentSessionId());
+		currentSessionId = emptyToNull(data.getCurrentSessionId());
 		if (currentSessionId != null && !sessions.containsKey(currentSessionId))
 		{
-			log.warn("Configured current session id {} was not found in persisted sessions", currentSessionId);
+			log.warn("Persisted current session id {} was not found in persisted sessions", currentSessionId);
 			currentSessionId = null;
 		}
 		Session current = getCurrentSession().orElse(null);
-		historyLoaded = current != null && !current.isActive() && config.historyLoaded();
+		historyLoaded = current != null && !current.isActive() && data.isHistoryLoaded();
 	}
 
 	/**
-	 * Persist sessions, current state, known players, and alt mappings to PluginConfig.
+	 * Persist sessions and current view state to the plugin's versioned JSON store.
 	 */
 	public void saveToConfig()
 	{
-		Session[] arr = sessions.values().toArray(new Session[0]);
-		try
+		if (!sessionStorage.save(buildStorageData()))
 		{
-			config.sessionsJson(gson.toJson(arr));
-			config.currentSessionId(nullToEmpty(currentSessionId));
-			config.historyLoaded(historyLoaded);
+			log.warn("Failed to save sessions to {}", sessionStorage.describeLocation());
 		}
-		catch (Exception e)
+	}
+
+	private SessionStorageData loadPersistedData()
+	{
+		if (sessionStorage.exists())
 		{
-			log.warn("Failed to save sessions to config", e);
+			return sessionStorage.load();
 		}
+
+		if (sessionStorage.isLegacyConfigStore() || !sessionStorage.hasLegacyData(config))
+		{
+			return sessionStorage.load();
+		}
+		if (!sessionStorage.canMigrateLegacy(config))
+		{
+			return sessionStorage.load();
+		}
+
+		SessionStorageData legacyData = sessionStorage.loadLegacy(config);
+		if (sessionStorage.save(legacyData))
+		{
+			sessionStorage.clearLegacySessionConfig(config);
+		}
+		else
+		{
+			log.warn("Legacy session config was not cleared because migration to {} failed", sessionStorage.describeLocation());
+		}
+		return legacyData;
+	}
+
+	private SessionStorageData buildStorageData()
+	{
+		SessionStorageData data = new SessionStorageData();
+		data.setSessions(new ArrayList<>(sessions.values()));
+		data.setCurrentSessionId(currentSessionId);
+		data.setHistoryLoaded(historyLoaded);
+		return data;
 	}
 
 	/**

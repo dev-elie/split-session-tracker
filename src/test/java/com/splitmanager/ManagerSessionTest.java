@@ -5,7 +5,13 @@ import com.splitmanager.models.Kill;
 import com.splitmanager.models.PendingValue;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.Session;
+import com.splitmanager.persistence.SessionStorage;
+import com.splitmanager.persistence.SessionStorageData;
 import com.splitmanager.utils.InstantTypeAdapter;
+import java.io.File;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
@@ -13,6 +19,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -22,12 +29,15 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.junit.rules.TemporaryFolder;
 import static org.mockito.ArgumentMatchers.anyString;
 import org.mockito.Mock;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.MockitoJUnitRunner;
@@ -45,6 +55,8 @@ public class ManagerSessionTest
 	@Mock
 	private ManagerPlugin pluginManager;
 	private ManagerSession managerSession;
+	@Rule
+	public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
 	@Before
 	public void setUp()
@@ -693,6 +705,123 @@ public class ManagerSessionTest
 		newManager.loadFromConfig();
 
 		assertEquals(managerSession.getAllSessionsNewestFirst().size(), newManager.getAllSessionsNewestFirst().size());
+	}
+
+	@Test
+	public void testFileBackedPersistence() throws Exception
+	{
+		File file = temporaryFolder.newFile("sessions.json");
+		SessionStorage storage = new SessionStorage(file, gson);
+		ManagerSession fileManager = new ManagerSession(config, playerManager, pluginManager, gson, storage);
+
+		fileManager.startSession();
+		String currentId = requireSession(fileManager.getCurrentSession()).getId();
+
+		ManagerSession restored = new ManagerSession(config, playerManager, pluginManager, gson, storage);
+		restored.loadFromConfig();
+
+		assertEquals(fileManager.getAllSessionsNewestFirst().size(), restored.getAllSessionsNewestFirst().size());
+		assertEquals(currentId, requireSession(restored.getCurrentSession()).getId());
+		verify(config, never()).sessionsJson(anyString());
+	}
+
+	@Test
+	public void testMigratesLegacyConfigToFileAndClearsOldKeys() throws Exception
+	{
+		File file = new File(temporaryFolder.getRoot(), "sessions.json");
+		Session archived = new Session("archived", Instant.EPOCH, null);
+		when(config.sessionsJson()).thenReturn(gson.toJson(new Session[]{archived}));
+		when(config.currentSessionId()).thenReturn("archived");
+		when(config.historyLoaded()).thenReturn(false);
+		SessionStorage storage = new SessionStorage(file, gson);
+		ManagerSession fileManager = new ManagerSession(config, playerManager, pluginManager, gson, storage);
+
+		fileManager.loadFromConfig();
+
+		assertTrue(file.exists());
+		assertEquals(1, fileManager.getAllSessionsNewestFirst().size());
+		assertEquals("archived", requireSession(fileManager.getCurrentSession()).getId());
+		verify(config).sessionsJson("");
+		verify(config).currentSessionId("");
+		verify(config).historyLoaded(false);
+	}
+
+	@Test
+	public void testMigratesProvidedLegacyProfileFileToVersionedSessionFile() throws Exception
+	{
+		Properties properties = new Properties();
+		try (InputStream stream = getClass().getResourceAsStream("/com/splitmanager/legacy-profile-sessions.properties"))
+		{
+			assertNotNull(stream);
+			properties.load(new InputStreamReader(stream, StandardCharsets.UTF_8));
+		}
+		String legacySessionsJson = properties.getProperty("Split Manager.sessionsJson");
+		String legacyCurrentSessionId = properties.getProperty("Split Manager.currentSessionId");
+		String legacyHistoryLoaded = properties.getProperty("Split Manager.historyLoaded", "false");
+		String legacyKnownPlayersCsv = properties.getProperty("Split Manager.PlayersCsv");
+		String legacyAltsJson = properties.getProperty("Split Manager.altsJson");
+		assertNotNull(legacySessionsJson);
+		assertNotNull(legacyKnownPlayersCsv);
+		assertNotNull(legacyAltsJson);
+		assertTrue(legacyKnownPlayersCsv.contains("Player001"));
+		assertTrue(legacyAltsJson.contains("Player"));
+
+		File migratedFile = new File(temporaryFolder.getRoot(), "migrated-sessions.json");
+		when(config.sessionsJson()).thenReturn(legacySessionsJson);
+		when(config.currentSessionId()).thenReturn(legacyCurrentSessionId);
+		when(config.historyLoaded()).thenReturn(Boolean.parseBoolean(legacyHistoryLoaded));
+		SessionStorage storage = new SessionStorage(migratedFile, gson);
+		ManagerSession fileManager = new ManagerSession(config, playerManager, pluginManager, gson, storage);
+
+		fileManager.loadFromConfig();
+
+		assertTrue(migratedFile.exists());
+		assertFalse(fileManager.getAllSessionsNewestFirst().isEmpty());
+		assertEquals(legacyCurrentSessionId, requireSession(fileManager.getCurrentSession()).getId());
+		SessionStorageData migrated = storage.load();
+		assertEquals(SessionStorageData.CURRENT_SCHEMA_VERSION, migrated.getSchemaVersion());
+		assertEquals(legacyCurrentSessionId, migrated.getCurrentSessionId());
+		assertEquals(fileManager.getAllSessionsNewestFirst().size(), migrated.getSessions().size());
+		verify(config).sessionsJson("");
+		verify(config).currentSessionId("");
+		verify(config).historyLoaded(false);
+	}
+
+	@Test
+	public void testDoesNotClearLegacyConfigWhenMigrationWriteFails() throws Exception
+	{
+		File parentFile = temporaryFolder.newFile("not-a-directory");
+		File file = new File(parentFile, "sessions.json");
+		Session archived = new Session("archived", Instant.EPOCH, null);
+		when(config.sessionsJson()).thenReturn(gson.toJson(new Session[]{archived}));
+		when(config.currentSessionId()).thenReturn("archived");
+		when(config.historyLoaded()).thenReturn(false);
+		SessionStorage storage = new SessionStorage(file, gson);
+		ManagerSession fileManager = new ManagerSession(config, playerManager, pluginManager, gson, storage);
+
+		fileManager.loadFromConfig();
+
+		assertEquals(1, fileManager.getAllSessionsNewestFirst().size());
+		verify(config, never()).sessionsJson("");
+		verify(config, never()).currentSessionId("");
+		verify(config, never()).historyLoaded(false);
+	}
+
+	@Test
+	public void testDoesNotClearInvalidLegacyConfigDuringMigration() throws Exception
+	{
+		File file = new File(temporaryFolder.getRoot(), "sessions.json");
+		when(config.sessionsJson()).thenReturn("{not valid json");
+		SessionStorage storage = new SessionStorage(file, gson);
+		ManagerSession fileManager = new ManagerSession(config, playerManager, pluginManager, gson, storage);
+
+		fileManager.loadFromConfig();
+
+		assertFalse(file.exists());
+		assertTrue(fileManager.getAllSessionsNewestFirst().isEmpty());
+		verify(config, never()).sessionsJson("");
+		verify(config, never()).currentSessionId("");
+		verify(config, never()).historyLoaded(false);
 	}
 
 	@Test

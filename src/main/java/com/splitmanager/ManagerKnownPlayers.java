@@ -1,9 +1,7 @@
 package com.splitmanager;
 
 import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 import com.splitmanager.utils.InstantTypeAdapter;
-import java.lang.reflect.Type;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -61,13 +59,16 @@ public class ManagerKnownPlayers
 		{
 			try
 			{
-				Type mapType = new TypeToken<Map<String, String>>()
-				{
-				}.getType();
-				Map<String, String> m = gson.fromJson(altsJson, mapType);
+				Map<?, ?> m = gson.fromJson(altsJson, Map.class);
 				if (m != null)
 				{
-					altMainMapping.putAll(m);
+					for (Map.Entry<?, ?> entry : m.entrySet())
+					{
+						if (entry.getKey() instanceof String && entry.getValue() instanceof String)
+						{
+							altMainMapping.put((String) entry.getKey(), (String) entry.getValue());
+						}
+					}
 				}
 			}
 			catch (Exception e)
