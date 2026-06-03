@@ -180,6 +180,33 @@ public class ChatDetectionServiceTest
 	}
 
 	@Test
+	public void invalidPvpRegexFallsBackToDefault()
+	{
+		when(config.pvpLootRegex()).thenReturn("[not valid");
+
+		List<PendingValue> values = service.detect(config, ChatSource.FRIENDS, "System",
+			"PKer has defeated Victim and received (765,432 coins) worth of loot!");
+
+		assertEquals(1, values.size());
+		assertEquals(PendingValue.Type.PVP, values.get(0).getType());
+		assertEquals("PKer", values.get(0).getSuggestedPlayer());
+		assertEquals(765432L, (long) values.get(0).getValue());
+	}
+
+	@Test
+	public void invalidAddCommandRegexFallsBackToDefault()
+	{
+		when(config.addCommandRegex()).thenReturn("[not valid");
+
+		List<PendingValue> values = service.detect(config, ChatSource.CLAN, "Player1", "!add 100");
+
+		assertEquals(1, values.size());
+		assertEquals(PendingValue.Type.ADD, values.get(0).getType());
+		assertEquals("Player1", values.get(0).getSuggestedPlayer());
+		assertEquals(100000L, (long) values.get(0).getValue());
+	}
+
+	@Test
 	public void returnsEmptyWhenDisabledOrInvalid()
 	{
 		when(config.detectPvmValues()).thenReturn(false);

@@ -218,4 +218,26 @@ public class ManagerPluginTest
 
 		verify(sessionManager, never()).addPendingValue(any());
 	}
+
+	@Test
+	public void testInvalidChatStatusRegexDoesNotBreakDetection()
+	{
+		when(config.chatLeaveOrKickRegex()).thenReturn("[not valid");
+		when(config.chatJoinRegex()).thenReturn("[also not valid");
+
+		ChatMessage chatMessage = new ChatMessage();
+		chatMessage.setType(ChatMessageType.CLAN_CHAT);
+		chatMessage.setName("Player1");
+		chatMessage.setMessage("!add 100");
+
+		managerPlugin.onChatMessage(chatMessage);
+
+		ArgumentCaptor<PendingValue> captor = ArgumentCaptor.forClass(PendingValue.class);
+		verify(sessionManager).addPendingValue(captor.capture());
+
+		PendingValue pv = captor.getValue();
+		assertEquals(PendingValue.Type.ADD, pv.getType());
+		assertEquals("Player1", pv.getSuggestedPlayer());
+		assertEquals(100000L, (long) pv.getValue());
+	}
 }
