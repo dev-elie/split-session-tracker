@@ -9,7 +9,11 @@ import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -145,5 +149,130 @@ public class SessionStorageTest
 		Path storagePath = new File(storage.describeLocation()).toPath().toAbsolutePath().normalize();
 		assertTrue(storagePath.startsWith(pluginDir));
 		assertFalse(storagePath.toString().contains(".."));
+	}
+
+	@Test
+	public void saveDoesNotArchiveWhenPrimaryExceedsCap()
+	{
+		File file = new File(temporaryFolder.getRoot(), "sessions.json");
+		SessionStorage storage = new SessionStorage(file, gson, 2000L);
+		SessionStorageData data = new SessionStorageData();
+		List<Session> sessions = new ArrayList<>();
+		sessions.addAll(completedThread("old", Instant.EPOCH, repeat("OldPlayer", 300)));
+		sessions.addAll(completedThread("new", Instant.EPOCH.plusSeconds(100), "NewPlayer"));
+		data.setSessions(sessions);
+
+		assertTrue(storage.save(data));
+
+		assertTrue(storage.load().getSessions().stream().anyMatch(session -> "old".equals(session.getId())));
+		assertFalse(storage.hasArchives());
+	}
+
+	@Test
+	public void archivePrimaryIfNeededArchivesOldestCompletedThreadsWhenPrimaryExceedsCap()
+	{
+		File file = new File(temporaryFolder.getRoot(), "sessions.json");
+		SessionStorage storage = new SessionStorage(file, gson, 2000L);
+		SessionStorageData data = new SessionStorageData();
+		List<Session> sessions = new ArrayList<>();
+		sessions.addAll(completedThread("old", Instant.EPOCH, repeat("OldPlayer", 300)));
+		sessions.addAll(completedThread("new", Instant.EPOCH.plusSeconds(100), "NewPlayer"));
+		data.setSessions(sessions);
+
+		assertTrue(storage.save(data));
+		Optional<SessionStorageData> archivedData = storage.archivePrimaryIfNeeded();
+
+		SessionStorageData primary = storage.load();
+		assertTrue(archivedData.isPresent());
+		assertFalse(primary.getSessions().stream().anyMatch(session -> "old".equals(session.getId())));
+		assertTrue(primary.getSessions().stream().anyMatch(session -> "new".equals(session.getId())));
+		assertFalse(archivedData.get().getSessions().stream().anyMatch(session -> "old".equals(session.getId())));
+		assertTrue(archivedData.get().getSessions().stream().anyMatch(session -> "new".equals(session.getId())));
+		assertTrue(storage.hasArchives());
+
+		SessionStorageData archive = loadArchive(file);
+		assertTrue(archive.getSessions().stream().anyMatch(session -> "old".equals(session.getId())));
+		assertTrue(archive.getSessions().stream().anyMatch(session -> "old-child".equals(session.getId())));
+		assertFalse(archive.getSessions().stream().anyMatch(session -> "new".equals(session.getId())));
+	}
+
+	@Test
+	public void archivePrimaryIfNeededCanRunOnlyOnceForRetainedPrimaryData()
+	{
+		File file = new File(temporaryFolder.getRoot(), "sessions.json");
+		SessionStorage storage = new SessionStorage(file, gson, 2000L);
+		SessionStorageData data = new SessionStorageData();
+		List<Session> sessions = new ArrayList<>();
+		sessions.addAll(completedThread("old", Instant.EPOCH, repeat("OldPlayer", 300)));
+		sessions.addAll(completedThread("new", Instant.EPOCH.plusSeconds(100), "NewPlayer"));
+		data.setSessions(sessions);
+
+		assertTrue(storage.save(data));
+		Optional<SessionStorageData> archivedData = storage.archivePrimaryIfNeeded();
+		assertTrue(archivedData.isPresent());
+		assertFalse(archivedData.get().getSessions().stream().anyMatch(session -> "old".equals(session.getId())));
+		assertFalse(storage.archivePrimaryIfNeeded().isPresent());
+
+		File[] archiveFiles = file.getParentFile().listFiles((dir, name) -> name.contains(".archive-"));
+		assertTrue(archiveFiles != null);
+		assertEquals(1, archiveFiles.length);
+	}
+
+	@Test
+	public void archivePrimaryIfNeededKeepsActiveCurrentThreadOutOfArchives()
+	{
+		File file = new File(temporaryFolder.getRoot(), "sessions.json");
+		SessionStorage storage = new SessionStorage(file, gson, 1200L);
+		SessionStorageData data = new SessionStorageData();
+		List<Session> sessions = new ArrayList<>();
+		sessions.addAll(completedThread("old", Instant.EPOCH, repeat("OldPlayer", 300)));
+		Session activeRoot = new Session("active", Instant.EPOCH.plusSeconds(100), null);
+		Session activeChild = new Session("active-child", Instant.EPOCH.plusSeconds(101), "active");
+		activeChild.getPlayers().add(repeat("ActivePlayer", 300));
+		sessions.add(activeRoot);
+		sessions.add(activeChild);
+		data.setSessions(sessions);
+		data.setCurrentSessionId("active-child");
+
+		assertTrue(storage.save(data));
+		Optional<SessionStorageData> archivedData = storage.archivePrimaryIfNeeded();
+
+		SessionStorageData primary = storage.load();
+		assertTrue(archivedData.isPresent());
+		assertTrue(primary.getSessions().stream().anyMatch(session -> "active".equals(session.getId())));
+		assertTrue(primary.getSessions().stream().anyMatch(session -> "active-child".equals(session.getId())));
+		assertEquals("active-child", primary.getCurrentSessionId());
+
+		SessionStorageData archive = loadArchive(file);
+		assertTrue(archive.getSessions().stream().anyMatch(session -> "old".equals(session.getId())));
+		assertFalse(archive.getSessions().stream().anyMatch(session -> "active".equals(session.getId())));
+	}
+
+	private List<Session> completedThread(String rootId, Instant start, String playerName)
+	{
+		Session root = new Session(rootId, start, null);
+		root.setEnd(start.plusSeconds(10));
+		Session child = new Session(rootId + "-child", start.plusSeconds(1), rootId);
+		child.setEnd(start.plusSeconds(10));
+		child.getPlayers().add(playerName);
+		child.getEvents().add(new SplitEvent(child.getId(), playerName, 100000L, start.plusSeconds(2)));
+		return Arrays.asList(root, child);
+	}
+
+	private SessionStorageData loadArchive(File primaryFile)
+	{
+		File[] archiveFiles = primaryFile.getParentFile().listFiles((dir, name) -> name.contains(".archive-"));
+		assertTrue(archiveFiles != null && archiveFiles.length == 1);
+		return new SessionStorage(archiveFiles[0], gson).load();
+	}
+
+	private String repeat(String value, int times)
+	{
+		StringBuilder builder = new StringBuilder(value.length() * times);
+		for (int i = 0; i < times; i++)
+		{
+			builder.append(value);
+		}
+		return builder.toString();
 	}
 }

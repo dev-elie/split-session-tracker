@@ -129,6 +129,7 @@ public class PanelView extends PluginPanel
 	private final JButton btnUnloadHistory = new JButton("Close");
 	private final JButton btnExportHistory = new JButton("Export");
 	private final JButton btnImportHistory = new JButton("Import clipboard");
+	private final JLabel archivedHistoryWarning = new JLabel("Older history has been archived and is not included in export.");
 	private final JButton btnAddToSession = new JButton("Add");
 	private final JButton btnRemoveFromSession = new JButton("Remove");
 	private final JComboBox<String> currentSessionPlayerDropdown = new JComboBox<>();
@@ -497,6 +498,13 @@ public class PanelView extends PluginPanel
 			return ((HistorySessionItem) selected).getSessionId();
 		}
 		return null;
+	}
+
+	public void setArchivedHistoryWarningVisible(boolean visible)
+	{
+		archivedHistoryWarning.setVisible(visible);
+		archivedHistoryWarning.revalidate();
+		archivedHistoryWarning.repaint();
 	}
 
 	private JTable makeRecentSplitsTable(RecentSplitsTable model)
@@ -1177,6 +1185,11 @@ public class PanelView extends PluginPanel
 
 		gbc.gridy = 3;
 		historyPanel.add(btnImportHistory, gbc);
+
+		archivedHistoryWarning.setForeground(new Color(170, 120, 0));
+		archivedHistoryWarning.setVisible(false);
+		gbc.gridy = 4;
+		historyPanel.add(archivedHistoryWarning, gbc);
 
 		return new DropdownRip("View history", historyPanel, false,
 			"Load a stopped session. Close history to start a new session.");

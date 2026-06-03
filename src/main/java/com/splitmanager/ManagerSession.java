@@ -574,8 +574,13 @@ public class ManagerSession
 	 */
 	public void loadFromConfig()
 	{
-		sessions.clear();
 		SessionStorageData data = loadPersistedData();
+		replaceSessionsFromStorageData(sessionStorage.archivePrimaryIfNeeded().orElse(data));
+	}
+
+	private void replaceSessionsFromStorageData(SessionStorageData data)
+	{
+		sessions.clear();
 		for (Session s : data.getSessions())
 		{
 			if (s != null && s.getId() != null)
@@ -602,10 +607,16 @@ public class ManagerSession
 	 */
 	public void saveToConfig()
 	{
-		if (!sessionStorage.save(buildStorageData()))
+		SessionStorageData data = buildStorageData();
+		if (!sessionStorage.save(data))
 		{
 			log.warn("Failed to save sessions to {}", sessionStorage.describeLocation());
 		}
+	}
+
+	public boolean hasArchivedSessionFiles()
+	{
+		return sessionStorage.hasArchives();
 	}
 
 	private SessionStorageData loadPersistedData()

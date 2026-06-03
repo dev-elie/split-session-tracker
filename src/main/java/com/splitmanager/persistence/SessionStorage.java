@@ -16,7 +16,13 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
@@ -30,11 +36,13 @@ public class SessionStorage
 {
 	private static final String FILE_SUFFIX = ".auto-split-manager.sessions.json";
 	private static final String PLUGIN_DIR = "auto-split-manager";
+	private static final long DEFAULT_MAX_PRIMARY_FILE_BYTES = 5L * 1024L * 1024L;
 
 	private final ConfigManager configManager;
 	private final File fixedFile;
 	private final Gson gson;
 	private final PluginConfig legacyConfig;
+	private final long maxPrimaryFileBytes;
 
 	@Inject
 	public SessionStorage(ConfigManager configManager, Gson gson)
@@ -43,14 +51,21 @@ public class SessionStorage
 		this.fixedFile = null;
 		this.legacyConfig = null;
 		this.gson = buildGson(gson);
+		this.maxPrimaryFileBytes = DEFAULT_MAX_PRIMARY_FILE_BYTES;
 	}
 
 	public SessionStorage(File fixedFile, Gson gson)
+	{
+		this(fixedFile, gson, DEFAULT_MAX_PRIMARY_FILE_BYTES);
+	}
+
+	public SessionStorage(File fixedFile, Gson gson, long maxPrimaryFileBytes)
 	{
 		this.configManager = null;
 		this.fixedFile = fixedFile;
 		this.legacyConfig = null;
 		this.gson = buildGson(gson);
+		this.maxPrimaryFileBytes = maxPrimaryFileBytes;
 	}
 
 	private SessionStorage(PluginConfig legacyConfig, Gson gson)
@@ -59,6 +74,7 @@ public class SessionStorage
 		this.fixedFile = null;
 		this.legacyConfig = legacyConfig;
 		this.gson = buildGson(gson);
+		this.maxPrimaryFileBytes = DEFAULT_MAX_PRIMARY_FILE_BYTES;
 	}
 
 	public static SessionStorage legacyConfig(PluginConfig legacyConfig, Gson gson)
@@ -162,6 +178,28 @@ public class SessionStorage
 			return false;
 		}
 
+		return writeDataToFile(file, data);
+	}
+
+	public Optional<SessionStorageData> archivePrimaryIfNeeded()
+	{
+		if (isLegacyConfigStore() || maxPrimaryFileBytes <= 0L)
+		{
+			return Optional.empty();
+		}
+
+		File file = resolveFile();
+		if (file == null || !file.exists() || file.length() <= maxPrimaryFileBytes)
+		{
+			return Optional.empty();
+		}
+
+		SessionStorageData data = load();
+		return archiveOverflowIfNeeded(file, data) ? Optional.of(data) : Optional.empty();
+	}
+
+	private boolean writeDataToFile(File file, SessionStorageData data)
+	{
 		try
 		{
 			File parent = file.getParentFile();
@@ -195,6 +233,205 @@ public class SessionStorage
 		{
 			log.warn("Failed to save session storage to {}", file, e);
 			return false;
+		}
+	}
+
+	private boolean archiveOverflowIfNeeded(File file, SessionStorageData data)
+	{
+		if (maxPrimaryFileBytes <= 0L || file.length() <= maxPrimaryFileBytes)
+		{
+			return false;
+		}
+
+		ArchiveSplit split = splitForArchive(data);
+		if (split.archiveSessions.isEmpty())
+		{
+			log.warn("Session storage {} exceeds {} bytes, but no completed history can be archived", file, maxPrimaryFileBytes);
+			return false;
+		}
+
+		boolean archived = false;
+		while (!split.archiveSessions.isEmpty())
+		{
+			File archiveFile = nextArchiveFile(file);
+			SessionStorageData archiveData = new SessionStorageData();
+			archiveData.setSessions(split.archiveSessions);
+			if (!writeDataToFile(archiveFile, archiveData))
+			{
+				log.warn("Could not archive old sessions to {}; keeping primary storage unchanged", archiveFile);
+				return archived;
+			}
+
+			if (!writeDataToFile(file, split.primaryData))
+			{
+				log.warn("Archived old sessions to {}, but failed to rewrite primary storage {}", archiveFile, file);
+				return archived;
+			}
+			copyStorageData(split.primaryData, data);
+			archived = true;
+
+			if (file.length() <= maxPrimaryFileBytes)
+			{
+				return true;
+			}
+
+			split = splitForArchive(split.primaryData);
+		}
+
+		if (file.length() > maxPrimaryFileBytes)
+		{
+			log.warn("Session storage {} still exceeds {} bytes after archiving all eligible history", file, maxPrimaryFileBytes);
+		}
+		return archived;
+	}
+
+	private void copyStorageData(SessionStorageData source, SessionStorageData target)
+	{
+		target.setSchemaVersion(source.getSchemaVersion());
+		target.setSessions(new ArrayList<>(source.getSessions()));
+		target.setCurrentSessionId(source.getCurrentSessionId());
+		target.setHistoryLoaded(source.isHistoryLoaded());
+	}
+
+	private ArchiveSplit splitForArchive(SessionStorageData data)
+	{
+		List<Session> sessions = new ArrayList<>(data.getSessions());
+		String currentRootId = findCurrentRootId(sessions, data.getCurrentSessionId());
+
+		List<String> candidateRootIds = sessions.stream()
+			.filter(session -> session != null && session.getMotherId() == null)
+			.filter(session -> !session.isActive())
+			.filter(session -> currentRootId == null || !currentRootId.equals(session.getId()))
+			.sorted(Comparator.comparing(Session::getStart))
+			.map(Session::getId)
+			.collect(java.util.stream.Collectors.toList());
+
+		if (candidateRootIds.isEmpty())
+		{
+			return new ArchiveSplit(data, List.of());
+		}
+
+		List<Session> retainedSessions = new ArrayList<>();
+		List<Session> archivedSessions = new ArrayList<>();
+		Set<String> archivedRootIds = new LinkedHashSet<>();
+		for (String candidateRootId : candidateRootIds)
+		{
+			archivedRootIds.add(candidateRootId);
+			retainedSessions.clear();
+			archivedSessions.clear();
+			for (Session session : sessions)
+			{
+				String rootId = rootId(session);
+				if (rootId != null && archivedRootIds.contains(rootId))
+				{
+					archivedSessions.add(session);
+				}
+				else
+				{
+					retainedSessions.add(session);
+				}
+			}
+
+			SessionStorageData retained = new SessionStorageData();
+			retained.setSessions(new ArrayList<>(retainedSessions));
+			retained.setCurrentSessionId(data.getCurrentSessionId());
+			retained.setHistoryLoaded(data.isHistoryLoaded());
+			if (serializedSize(retained) <= maxPrimaryFileBytes)
+			{
+				return new ArchiveSplit(retained, new ArrayList<>(archivedSessions));
+			}
+		}
+
+		SessionStorageData retained = new SessionStorageData();
+		retained.setSessions(new ArrayList<>(retainedSessions));
+		retained.setCurrentSessionId(data.getCurrentSessionId());
+		retained.setHistoryLoaded(data.isHistoryLoaded());
+		return new ArchiveSplit(retained, new ArrayList<>(archivedSessions));
+	}
+
+	private String findCurrentRootId(List<Session> sessions, String currentSessionId)
+	{
+		if (currentSessionId == null)
+		{
+			return null;
+		}
+		for (Session session : sessions)
+		{
+			if (session != null && currentSessionId.equals(session.getId()))
+			{
+				return rootId(session);
+			}
+		}
+		return null;
+	}
+
+	private String rootId(Session session)
+	{
+		if (session == null)
+		{
+			return null;
+		}
+		return session.getMotherId() == null ? session.getId() : session.getMotherId();
+	}
+
+	private long serializedSize(SessionStorageData data)
+	{
+		data.setSchemaVersion(SessionStorageData.CURRENT_SCHEMA_VERSION);
+		return gson.toJson(data).getBytes(StandardCharsets.UTF_8).length;
+	}
+
+	private File nextArchiveFile(File primaryFile)
+	{
+		File parent = primaryFile.getParentFile();
+		String baseName = archiveBaseName(primaryFile);
+		int index = 1;
+		File candidate;
+		do
+		{
+			candidate = new File(parent, baseName + ".archive-" + String.format("%03d", index) + FILE_SUFFIX);
+			index++;
+		}
+		while (candidate.exists());
+		return candidate;
+	}
+
+	private String archiveBaseName(File primaryFile)
+	{
+		String name = primaryFile.getName();
+		if (name.endsWith(FILE_SUFFIX))
+		{
+			return name.substring(0, name.length() - FILE_SUFFIX.length());
+		}
+		return name;
+	}
+
+	public boolean hasArchives()
+	{
+		File file = resolveFile();
+		if (file == null)
+		{
+			return false;
+		}
+		File parent = file.getParentFile();
+		if (parent == null || !parent.isDirectory())
+		{
+			return false;
+		}
+		String baseName = archiveBaseName(file);
+		String prefix = baseName + ".archive-";
+		File[] archiveFiles = parent.listFiles((dir, name) -> name.startsWith(prefix) && name.endsWith(FILE_SUFFIX));
+		return archiveFiles != null && archiveFiles.length > 0;
+	}
+
+	private static final class ArchiveSplit
+	{
+		private final SessionStorageData primaryData;
+		private final List<Session> archiveSessions;
+
+		private ArchiveSplit(SessionStorageData primaryData, List<Session> archiveSessions)
+		{
+			this.primaryData = primaryData;
+			this.archiveSessions = archiveSessions;
 		}
 	}
 

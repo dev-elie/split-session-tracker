@@ -869,6 +869,7 @@ public class PanelController implements PanelActions
 			? sessionManager.getCurrentSession().map(Session::getId).orElse(null)
 			: view.getSelectedHistorySessionId();
 		view.setHistorySessions(sessionManager.getHistorySessionsNewestFirst(), selectedSessionId);
+		view.setArchivedHistoryWarningVisible(sessionManager.hasArchivedSessionFiles());
 	}
 
 	/**
