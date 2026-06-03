@@ -109,22 +109,55 @@ public class ManagerSession
 
 	public void insertLootAt(int index, String player, Long amount)
 	{
-		getCurrentSession().ifPresent(curr -> {
-			if (!prepareHistoryMutation())
+		Session editable = getCurrentEditableSession().orElse(null);
+		if (editable == null || amount == null)
+		{
+			return;
+		}
+
+		List<SplitEvent> allEvents = getAllEvents();
+		if (index < 0 || index > allEvents.size())
+		{
+			return;
+		}
+
+		String mainPlayer = resolveMainName(player);
+		if (mainPlayer == null)
+		{
+			return;
+		}
+		if (!prepareHistoryMutation())
+		{
+			return;
+		}
+
+		String targetSessionId = editable.getId();
+		if (!allEvents.isEmpty())
+		{
+			int targetIndex = index < allEvents.size() ? index : allEvents.size() - 1;
+			targetSessionId = allEvents.get(targetIndex).getSessionId();
+		}
+
+		Session targetSession = sessions.get(targetSessionId);
+		if (targetSession == null)
+		{
+			targetSession = editable;
+		}
+
+		SplitEvent event = new SplitEvent(targetSession.getId(), mainPlayer, amount, Instant.now());
+		event.setType(SplitEvent.TYPE_LOOT);
+
+		int localTargetIndex = 0;
+		for (int i = 0; i < index; i++)
+		{
+			if (targetSession.getId().equals(allEvents.get(i).getSessionId()))
 			{
-				return;
+				localTargetIndex++;
 			}
-			String mainPlayer = resolveMainName(player);
-			if (mainPlayer == null)
-			{
-				return;
-			}
-			SplitEvent event = new SplitEvent(curr.getId(), mainPlayer, amount, Instant.now());
-			event.setType(SplitEvent.TYPE_LOOT);
-			curr.getEvents().add(event);
-			invalidateEventsCache();
-			saveAfterMutation();
-		});
+		}
+		targetSession.getEvents().add(localTargetIndex, event);
+		invalidateEventsCache();
+		saveAfterMutation();
 	}
 
 	public void removeEventAt(int index)
@@ -351,10 +384,69 @@ public class ManagerSession
 			}
 		}
 		targetSession.getEvents().add(localTargetIndex, movedEvent);
+		if (movedEvent.isRosterEvent())
+		{
+			rebuildThreadRosters(targetSession);
+		}
 
 		invalidateEventsCache();
 		saveAfterMutation();
 		return true;
+	}
+
+	private void rebuildThreadRosters(Session session)
+	{
+		List<Session> thread = getThreadSessions(session);
+		Set<String> activeRoster = new LinkedHashSet<>();
+		for (Session part : thread)
+		{
+			if (part.getMotherId() == null)
+			{
+				continue;
+			}
+
+			Set<String> segmentRoster = new LinkedHashSet<>(activeRoster);
+			for (SplitEvent event : part.getEvents())
+			{
+				applyRosterEvent(segmentRoster, event);
+			}
+			part.getPlayers().clear();
+			part.getPlayers().addAll(segmentRoster);
+			activeRoster = segmentRoster;
+		}
+	}
+
+	private void applyRosterEvent(Set<String> roster, SplitEvent event)
+	{
+		if (event == null || event.getPlayer() == null)
+		{
+			return;
+		}
+		if (SplitEvent.TYPE_JOINED.equalsIgnoreCase(event.getType()))
+		{
+			addPlayerName(roster, event.getPlayer());
+		}
+		else if (SplitEvent.TYPE_LEFT.equalsIgnoreCase(event.getType()))
+		{
+			removePlayerName(roster, event.getPlayer());
+		}
+	}
+
+	private void addPlayerName(Set<String> roster, String player)
+	{
+		for (String existing : roster)
+		{
+			if (existing.equalsIgnoreCase(player))
+			{
+				return;
+			}
+		}
+		roster.add(player);
+	}
+
+	private void removePlayerName(Set<String> roster, String player)
+	{
+		roster.removeIf(existing -> existing.equalsIgnoreCase(player));
 	}
 
 	private boolean hasValidRosterEventOrder(List<SplitEvent> events)
@@ -1696,7 +1788,7 @@ public class ManagerSession
 			}
 		}
 		motherEventsCache.put(motherId, built);
-		return built;
+		return Collections.unmodifiableList(built);
 	}
 
 

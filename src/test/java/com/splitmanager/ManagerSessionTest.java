@@ -1097,6 +1097,33 @@ public class ManagerSessionTest
 	}
 
 	@Test
+	public void testGetAllEventsAfterReloadReturnsUnmodifiableListOnFirstCall()
+	{
+		managerSession.startSession();
+		String p1 = "Player1";
+		resolveToSelf(p1);
+		managerSession.addPlayerToActive(p1);
+		managerSession.addLoot(p1, 100000L);
+
+		String currentId = requireSession(managerSession.getCurrentSession()).getId();
+		when(config.sessionsJson()).thenReturn(gson.toJson(managerSession.getAllSessionsNewestFirst()));
+		when(config.currentSessionId()).thenReturn(currentId);
+
+		ManagerSession reloaded = new ManagerSession(config, playerManager, pluginManager, gson);
+		reloaded.loadFromConfig();
+
+		try
+		{
+			reloaded.getAllEvents().add(new SplitEvent(currentId, p1, 1L, Instant.now()));
+			fail("Reloaded events should be unmodifiable on the first getAllEvents call");
+		}
+		catch (UnsupportedOperationException expected)
+		{
+			assertTrue(true);
+		}
+	}
+
+	@Test
 	public void testMoveEventReordersWithinSessionAndAllowsDropAfterLastRow()
 	{
 		managerSession.startSession();
@@ -1173,6 +1200,35 @@ public class ManagerSessionTest
 		assertEquals(-166667L, requireMetric(after, p2).split);
 		assertEquals(0L, requireMetric(after, p3).total);
 		assertEquals(133333L, requireMetric(after, p3).split);
+	}
+
+	@Test
+	public void testMoveRosterJoinInHistoryModeRebuildsSegmentRostersForMetrics()
+	{
+		managerSession.startSession();
+		String p1 = "Player1";
+		String p2 = "Player2";
+		resolveToSelf(p1, p2);
+
+		managerSession.addPlayerToActive(p1);
+		managerSession.addLoot(p1, 100000L);
+		managerSession.addPlayerToActive(p2);
+		managerSession.addLoot(p2, 300000L);
+		managerSession.stopSession();
+
+		Session historyRoot = managerSession.getHistorySessionsNewestFirst().get(0);
+		assertTrue(managerSession.loadHistory(historyRoot.getId()).isPresent());
+		Session editable = requireSession(managerSession.getCurrentEditableSession());
+
+		int joinedIndex = findEventIndex(SplitEvent.TYPE_JOINED, p2);
+		assertTrue(joinedIndex >= 0);
+		assertTrue(managerSession.moveEvent(joinedIndex, 1));
+
+		List<PlayerMetrics> after = managerSession.computeMetricsFor(editable, true);
+		assertEquals(100000L, requireMetric(after, p1).total);
+		assertEquals(100000L, requireMetric(after, p1).split);
+		assertEquals(300000L, requireMetric(after, p2).total);
+		assertEquals(-100000L, requireMetric(after, p2).split);
 	}
 
 	@Test
@@ -1348,9 +1404,28 @@ public class ManagerSessionTest
 		assertFalse(managerSession.moveEvent(-1, 0));
 		assertFalse(managerSession.moveEvent(0, 0));
 
-		int insertIndex = findEventIndex(SplitEvent.TYPE_LOOT, "Player1");
+		int insertIndex = findLootEventIndex("Player1", 100L);
 		assertTrue(insertIndex >= 0);
 		assertTrue(managerSession.moveEvent(insertIndex, 0));
+	}
+
+	@Test
+	public void testInsertLootAtUsesRequestedGlobalEventIndex()
+	{
+		managerSession.startSession();
+		resolveToSelf("Player1");
+
+		managerSession.addPlayerToActive("Player1");
+		managerSession.addLoot("Player1", 100L);
+		managerSession.addLoot("Player1", 300L);
+
+		managerSession.insertLootAt(2, "Player1", 200L);
+
+		List<SplitEvent> events = managerSession.getAllEvents();
+		assertEquals(0L, events.get(0).getAmount().longValue());
+		assertEquals(100L, events.get(1).getAmount().longValue());
+		assertEquals(200L, events.get(2).getAmount().longValue());
+		assertEquals(300L, events.get(3).getAmount().longValue());
 	}
 
 	@Test

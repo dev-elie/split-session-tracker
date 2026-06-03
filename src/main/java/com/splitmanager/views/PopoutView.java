@@ -307,25 +307,46 @@ public class PopoutView extends PanelView
 
 	private void refreshHistoryEditor()
 	{
+		HistoryTableModel model = getHistoryTableModel();
+		if (model != null)
+		{
+			model.refresh();
+		}
+	}
+
+	private HistoryTableModel getHistoryTableModel()
+	{
 		if (editContainer == null)
 		{
-			return;
+			return null;
 		}
-		for (Component c : editContainer.getComponents())
+
+		for (Component component : editContainer.getComponents())
 		{
-			if (c instanceof JScrollPane)
+			HistoryTableModel model = getHistoryTableModel(component);
+			if (model != null)
 			{
-				JScrollPane scroll = (JScrollPane) c;
-				if (scroll.getViewport().getView() instanceof JTable)
-				{
-					JTable table = (JTable) scroll.getViewport().getView();
-					if (table.getModel() instanceof HistoryTableModel)
-					{
-						((HistoryTableModel) table.getModel()).refresh();
-					}
-				}
+				return model;
 			}
 		}
+		return null;
+	}
+
+	private HistoryTableModel getHistoryTableModel(Component component)
+	{
+		if (!(component instanceof JScrollPane))
+		{
+			return null;
+		}
+
+		Component view = ((JScrollPane) component).getViewport().getView();
+		if (!(view instanceof JTable))
+		{
+			return null;
+		}
+
+		javax.swing.table.TableModel model = ((JTable) view).getModel();
+		return model instanceof HistoryTableModel ? (HistoryTableModel) model : null;
 	}
 
 	private void refreshGraph()
@@ -639,48 +660,7 @@ public class PopoutView extends PanelView
 		DeleteButtonEditor(HistoryTableModel model)
 		{
 			this.model = model;
-			button.addActionListener(e -> {
-				int rowToDelete = row;
-				JTable currentTable = table;
-				fireEditingStopped();
-				row = -1;
-				if (rowToDelete >= 0 && rowToDelete < model.getRowCount())
-				{
-					if (model.isPendingRosterDelete(rowToDelete))
-					{
-						removeRows(model.getPendingRosterDeleteRow(), model.getPendingRosterDeleteLinkedRow());
-					}
-					else if (model.getEventAt(rowToDelete).map(SplitEvent::isRosterEvent).orElse(false))
-					{
-						SplitEvent selected = model.getEventAt(rowToDelete).orElse(null);
-						if (selected != null && SplitEvent.TYPE_JOINED.equalsIgnoreCase(selected.getType()))
-						{
-							if (model.hasAssignedSplitsInRosterPeriod(rowToDelete))
-							{
-								model.clearPendingRosterDelete();
-								toast(PopoutView.this, "Cannot remove a join period with assigned splits.");
-								return;
-							}
-							int linkedRow = model.findLinkedRosterEventRow(rowToDelete);
-							if (linkedRow >= 0)
-							{
-								model.markPendingRosterDelete(rowToDelete, linkedRow);
-								highlightLinkedRosterRows(currentTable, rowToDelete, linkedRow);
-								return;
-							}
-						}
-						model.clearPendingRosterDelete();
-						sessionManager.removeEventAt(rowToDelete);
-					}
-					else
-					{
-						model.clearPendingRosterDelete();
-						sessionManager.removeEventAt(rowToDelete);
-					}
-					model.refresh();
-					controller.refreshAllView();
-				}
-			});
+			button.addActionListener(e -> handleDeleteClick());
 		}
 
 		@Override
@@ -703,6 +683,67 @@ public class PopoutView extends PanelView
 		private void removeRows(int firstRow, int secondRow)
 		{
 			sessionManager.removeEventsAt(java.util.Arrays.asList(firstRow, secondRow));
+		}
+
+		private void handleDeleteClick()
+		{
+			int rowToDelete = row;
+			JTable currentTable = table;
+			fireEditingStopped();
+			row = -1;
+
+			if (rowToDelete < 0 || rowToDelete >= model.getRowCount())
+			{
+				return;
+			}
+
+			if (model.isPendingRosterDelete(rowToDelete))
+			{
+				removeRows(model.getPendingRosterDeleteRow(), model.getPendingRosterDeleteLinkedRow());
+				refreshAfterDelete();
+				return;
+			}
+
+			SplitEvent selected = model.getEventAt(rowToDelete).orElse(null);
+			if (shouldPauseForLinkedRosterDelete(rowToDelete, selected, currentTable))
+			{
+				return;
+			}
+
+			model.clearPendingRosterDelete();
+			sessionManager.removeEventAt(rowToDelete);
+			refreshAfterDelete();
+		}
+
+		private boolean shouldPauseForLinkedRosterDelete(int rowToDelete, SplitEvent selected, JTable currentTable)
+		{
+			if (selected == null || !selected.isRosterEvent() || !SplitEvent.TYPE_JOINED.equalsIgnoreCase(selected.getType()))
+			{
+				return false;
+			}
+
+			if (model.hasAssignedSplitsInRosterPeriod(rowToDelete))
+			{
+				model.clearPendingRosterDelete();
+				toast(PopoutView.this, "Cannot remove a join period with assigned splits.");
+				return true;
+			}
+
+			int linkedRow = model.findLinkedRosterEventRow(rowToDelete);
+			if (linkedRow < 0)
+			{
+				return false;
+			}
+
+			model.markPendingRosterDelete(rowToDelete, linkedRow);
+			highlightLinkedRosterRows(currentTable, rowToDelete, linkedRow);
+			return true;
+		}
+
+		private void refreshAfterDelete()
+		{
+			model.refresh();
+			controller.refreshAllView();
 		}
 
 		private void highlightLinkedRosterRows(JTable table, int rowToDelete, int linkedRow)
