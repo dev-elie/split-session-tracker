@@ -260,8 +260,8 @@ public class Formats
 			{
 				return "";
 			}
-			Long k = ((Number) value).longValue();
-			return k + "K";
+			long coins = ((Number) value).longValue();
+			return toSuffixString(coins, 'k');
 		}
 
 	}

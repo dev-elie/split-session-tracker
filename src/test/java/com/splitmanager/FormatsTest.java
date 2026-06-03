@@ -105,10 +105,20 @@ public class FormatsTest
 	@Test
 	public void testValueToStringAndSharedFormatters()
 	{
-		assertEquals("123K", formatter.valueToString(123L));
+		assertEquals("123K", formatter.valueToString(123000L));
 		assertEquals("", formatter.valueToString(null));
 		assertEquals("1,234", Formats.getDecimalFormat().format(1234));
 		assertFalse(Formats.getDateTime().format(Instant.EPOCH).isEmpty());
+	}
+
+	@Test
+	public void testValueToStringDisplaysCommittedRawCoinsWithSuffix()
+		throws ParseException
+	{
+		Object committedValue = formatter.stringToValue("12");
+
+		assertEquals(12000L, committedValue);
+		assertEquals("12K", formatter.valueToString(committedValue));
 	}
 
 	@Test
