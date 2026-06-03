@@ -33,7 +33,7 @@ public class SplitEvent
 		this.at = at;
 	}
 
-	public boolean isLoot()
+	public boolean isLootEvent()
 	{
 		return type == null || TYPE_LOOT.equalsIgnoreCase(type);
 	}

@@ -585,7 +585,7 @@ public class ManagerSessionTest
 		managerSession.addPendingValue(pv1);
 		managerSession.applyPendingValueToPlayer(pv1.getId(), p1);
 
-		// Segment 2: Add P3 (forks because Segment 1 has events)
+		// Segment 2: Add P3 (forks because Segment 1 has loot events)
 		managerSession.addPlayerToActive(p3);
 
 		// P2 drops 300k
@@ -593,7 +593,7 @@ public class ManagerSessionTest
 		managerSession.addPendingValue(pv2);
 		managerSession.applyPendingValueToPlayer(pv2.getId(), p2);
 
-		// Segment 3: Remove P1 (forks because Segment 2 has events)
+		// Segment 3: Remove P1 (forks because Segment 2 has loot events)
 		managerSession.removePlayerFromSession(p1);
 
 		// P3 drops 60k
@@ -901,6 +901,32 @@ public class ManagerSessionTest
 		assertFalse(managerSession.addLoot(p1, null));
 
 		assertFalse(managerSession.addLoot(" ", 42L));
+	}
+
+	@Test
+	public void testRosterOnlyEventsDoNotForkChildSessions()
+	{
+		managerSession.startSession();
+		resolveToSelf("Player1", "Player2", "Player3");
+
+		assertTrue(managerSession.addPlayerToActive("Player1"));
+		Session firstChild = requireSession(managerSession.getCurrentSession());
+
+		assertTrue(managerSession.addPlayerToActive("Player2"));
+		assertTrue(managerSession.removePlayerFromSession("Player1"));
+
+		Session current = requireSession(managerSession.getCurrentSession());
+		assertEquals(firstChild.getId(), current.getId());
+		assertEquals(2, managerSession.getAllSessionsNewestFirst().size());
+		assertFalse(current.hasLootEvents());
+		assertTrue(current.hasEvents());
+
+		assertTrue(managerSession.addLoot("Player2", 42L));
+		assertTrue(managerSession.addPlayerToActive("Player3"));
+
+		Session forkedChild = requireSession(managerSession.getCurrentSession());
+		assertNotEquals(firstChild.getId(), forkedChild.getId());
+		assertEquals(3, managerSession.getAllSessionsNewestFirst().size());
 	}
 
 	@Test

@@ -484,7 +484,7 @@ public class PopoutView extends PanelView
 				{
 					return false;
 				}
-				if (event != null && event.isLoot() && samePlayer(player, event.getPlayer()))
+				if (event != null && event.isLootEvent() && samePlayer(player, event.getPlayer()))
 				{
 					return true;
 				}

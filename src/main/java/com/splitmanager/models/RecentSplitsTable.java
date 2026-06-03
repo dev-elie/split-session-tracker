@@ -158,7 +158,7 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 		{
 			return geTaxAmount(event, geTaxSettings);
 		}
-		if (event == null || !event.isLoot() || event.getAmount() == null || !accountForGeTax())
+		if (event == null || !event.isLootEvent() || event.getAmount() == null || !accountForGeTax())
 		{
 			return 0L;
 		}
@@ -185,7 +185,7 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 	private long geTaxAmount(SplitEvent event, SplitCalculator.GeTaxSettings settings)
 	{
 		if (event == null
-			|| !event.isLoot()
+			|| !event.isLootEvent()
 			|| event.getAmount() == null
 			|| settings == null
 			|| !settings.isEnabled()

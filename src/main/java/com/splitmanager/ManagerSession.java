@@ -971,7 +971,7 @@ public class ManagerSession
 	}
 
 	/**
-	 * Add a player to the currently active child session. If the child already has events recorded,
+	 * Add a player to the currently active child session. If the child already has loot events recorded,
 	 * a new child session is forked (same mother), roster is copied, the player is added, and the
 	 * previous child is ended to preserve historical rosters per split segment.
 	 * Alt names are resolved to main before checks. No-op in history mode.
@@ -1015,7 +1015,7 @@ public class ManagerSession
 			return true;
 		}
 
-		if (curr.hasEvents())
+		if (curr.hasLootEvents())
 		{
 			// Create a new child session, copy players, add this player, end current child
 			String motherId = curr.getMotherId() == null ? curr.getId() : curr.getMotherId();
@@ -1043,7 +1043,7 @@ public class ManagerSession
 		else
 		{
 			curr.getPlayers().add(fMain);
-			// Record a JOINED event in the current child (no events yet)
+			// Record a JOINED event in the current child (no loot events yet)
 			SplitEvent joinEvent = new SplitEvent(curr.getId(), fMain, 0L, Instant.now());
 			joinEvent.setType(SplitEvent.TYPE_JOINED);
 			curr.getEvents().add(joinEvent);
@@ -1057,7 +1057,7 @@ public class ManagerSession
 	}
 
 	/**
-	 * Remove a player from the active child session. If the current child already has events,
+	 * Remove a player from the active child session. If the current child already has loot events,
 	 * a new child is created (same mother) without this player, and the current child is ended
 	 * to keep per-segment rosters intact. No-op in history mode.
 	 *
@@ -1104,7 +1104,7 @@ public class ManagerSession
 			return true;
 		}
 
-		if (curr.hasEvents())
+		if (curr.hasLootEvents())
 		{
 			// Create a new child without this player, end current child
 			String motherId = curr.getMotherId() == null ? curr.getId() : curr.getMotherId();
@@ -1132,7 +1132,7 @@ public class ManagerSession
 		{
 			String finalPlayer = player;
 			curr.getPlayers().removeIf(p -> p.equalsIgnoreCase(finalPlayer));
-			// Record a LEFT event in the current child (no events yet)
+			// Record a LEFT event in the current child (no loot events yet)
 			SplitEvent leaveEvent = new SplitEvent(curr.getId(), player, 0L, Instant.now());
 			leaveEvent.setType(SplitEvent.TYPE_LEFT);
 			curr.getEvents().add(leaveEvent);

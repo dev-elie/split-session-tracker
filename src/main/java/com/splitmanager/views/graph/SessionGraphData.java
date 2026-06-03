@@ -112,7 +112,7 @@ public final class SessionGraphData
 			return List.of();
 		}
 		return events.stream()
-			.filter(event -> event != null && event.isLoot() && event.getAmount() != null)
+			.filter(event -> event != null && event.isLootEvent() && event.getAmount() != null)
 			.sorted(Comparator.comparing(SplitEvent::getAt, Comparator.nullsLast(Comparator.naturalOrder())))
 			.collect(Collectors.toList());
 	}

@@ -104,7 +104,7 @@ public class SplitCalculator
 
 		for (SplitEvent event : part.getEvents())
 		{
-			if (!event.isLoot() || event.getAmount() == null)
+			if (!event.isLootEvent() || event.getAmount() == null)
 			{
 				continue;
 			}

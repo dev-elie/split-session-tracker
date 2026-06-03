@@ -113,4 +113,12 @@ public class Session
 	{
 		return !events.isEmpty();
 	}
+
+	/**
+	 * @return true if at least one loot event has been recorded in this segment.
+	 */
+	public boolean hasLootEvents()
+	{
+		return events.stream().anyMatch(SplitEvent::isLootEvent);
+	}
 }
