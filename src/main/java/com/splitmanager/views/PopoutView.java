@@ -4,7 +4,7 @@ import com.splitmanager.ManagerKnownPlayers;
 import com.splitmanager.ManagerSession;
 import com.splitmanager.PluginConfig;
 import com.splitmanager.controllers.PanelController;
-import com.splitmanager.models.Kill;
+import com.splitmanager.models.SplitEvent;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.Session;
 import com.splitmanager.utils.Formats;
@@ -332,14 +332,14 @@ public class PopoutView extends PanelView
 		Session currentSession = getSessionManager().isHistoryLoaded()
 			? getSessionManager().getCurrentEditableSession().orElse(getSessionManager().getCurrentSession().orElse(null))
 			: getSessionManager().getCurrentSession().orElse(null);
-		List<Kill> kills = currentSession == null ? List.of() : getSessionManager().getAllKills();
+		List<SplitEvent> events = currentSession == null ? List.of() : getSessionManager().getAllEvents();
 		List<PlayerMetrics> metrics = currentSession == null
 			? List.of()
 			: getSessionManager().computeMetricsFor(currentSession, shouldShowSleepingPlayersInGraph());
 		SessionGraphSnapshot snapshot = SessionGraphData.build(
 			currentSession,
 			getSessionManager().getAllSessionsNewestFirst(),
-			kills,
+			events,
 			metrics,
 			mode,
 			Instant.now());
@@ -413,7 +413,7 @@ public class PopoutView extends PanelView
 
 		private static final int DELETE_COLUMN = 4;
 		private final String[] columns = {"Time", "Player", "Amount", "Type", "X"};
-		private List<Kill> kills = new ArrayList<>();
+		private List<SplitEvent> events = new ArrayList<>();
 		private int pendingRosterDeleteRow = -1;
 		private int pendingRosterDeleteLinkedRow = -1;
 
@@ -424,7 +424,7 @@ public class PopoutView extends PanelView
 
 		void refresh()
 		{
-			kills = new ArrayList<>(sessionManager.getAllKills());
+			events = new ArrayList<>(sessionManager.getAllEvents());
 			clearPendingRosterDelete();
 			fireTableDataChanged();
 		}
@@ -460,12 +460,12 @@ public class PopoutView extends PanelView
 
 		int findLinkedRosterEventRow(int rowIndex)
 		{
-			Kill selected = getKillAt(rowIndex).orElse(null);
+			SplitEvent selected = getEventAt(rowIndex).orElse(null);
 			if (selected == null || !selected.isRosterEvent())
 			{
 				return -1;
 			}
-			if (Kill.TYPE_JOINED.equalsIgnoreCase(selected.getType()))
+			if (SplitEvent.TYPE_JOINED.equalsIgnoreCase(selected.getType()))
 			{
 				return findNextLeftRosterEvent(rowIndex, selected.getPlayer());
 			}
@@ -474,20 +474,20 @@ public class PopoutView extends PanelView
 
 		boolean hasAssignedSplitsInRosterPeriod(int rowIndex)
 		{
-			Kill selected = getKillAt(rowIndex).orElse(null);
-			if (selected == null || !Kill.TYPE_JOINED.equalsIgnoreCase(selected.getType()))
+			SplitEvent selected = getEventAt(rowIndex).orElse(null);
+			if (selected == null || !SplitEvent.TYPE_JOINED.equalsIgnoreCase(selected.getType()))
 			{
 				return false;
 			}
 			String player = selected.getPlayer();
-			for (int i = rowIndex + 1; i < kills.size(); i++)
+			for (int i = rowIndex + 1; i < events.size(); i++)
 			{
-				Kill kill = kills.get(i);
-				if (kill != null && kill.isRosterEvent() && samePlayer(player, kill.getPlayer()))
+				SplitEvent event = events.get(i);
+				if (event != null && event.isRosterEvent() && samePlayer(player, event.getPlayer()))
 				{
 					return false;
 				}
-				if (kill != null && kill.isLoot() && samePlayer(player, kill.getPlayer()))
+				if (event != null && event.isLoot() && samePlayer(player, event.getPlayer()))
 				{
 					return true;
 				}
@@ -497,12 +497,12 @@ public class PopoutView extends PanelView
 
 		private int findNextLeftRosterEvent(int rowIndex, String player)
 		{
-			for (int i = rowIndex + 1; i < kills.size(); i++)
+			for (int i = rowIndex + 1; i < events.size(); i++)
 			{
-				Kill candidate = kills.get(i);
+				SplitEvent candidate = events.get(i);
 				if (samePlayer(player, candidate.getPlayer()) && candidate.isRosterEvent())
 				{
-					return Kill.TYPE_LEFT.equalsIgnoreCase(candidate.getType()) ? i : -1;
+					return SplitEvent.TYPE_LEFT.equalsIgnoreCase(candidate.getType()) ? i : -1;
 				}
 			}
 			return -1;
@@ -513,17 +513,17 @@ public class PopoutView extends PanelView
 			return first != null && first.equalsIgnoreCase(second);
 		}
 
-		java.util.Optional<Kill> getKillAt(int rowIndex)
+		java.util.Optional<SplitEvent> getEventAt(int rowIndex)
 		{
-			return rowIndex >= 0 && rowIndex < kills.size()
-				? java.util.Optional.of(kills.get(rowIndex))
+			return rowIndex >= 0 && rowIndex < events.size()
+				? java.util.Optional.of(events.get(rowIndex))
 				: java.util.Optional.empty();
 		}
 
 		@Override
 		public int getRowCount()
 		{
-			return kills.size();
+			return events.size();
 		}
 
 		@Override
@@ -535,7 +535,7 @@ public class PopoutView extends PanelView
 		@Override
 		public Object getValueAt(int rowIndex, int columnIndex)
 		{
-			Kill k = kills.get(rowIndex);
+			SplitEvent k = events.get(rowIndex);
 			switch (columnIndex)
 			{
 				case 0:
@@ -571,7 +571,7 @@ public class PopoutView extends PanelView
 			{
 				return;
 			}
-			Kill k = kills.get(rowIndex);
+			SplitEvent k = events.get(rowIndex);
 			if (columnIndex == 1)
 			{
 				k.setPlayer(aValue == null ? "" : aValue.toString());
@@ -637,10 +637,10 @@ public class PopoutView extends PanelView
 					{
 						removeRows(model.getPendingRosterDeleteRow(), model.getPendingRosterDeleteLinkedRow());
 					}
-					else if (model.getKillAt(rowToDelete).map(Kill::isRosterEvent).orElse(false))
+					else if (model.getEventAt(rowToDelete).map(SplitEvent::isRosterEvent).orElse(false))
 					{
-						Kill selected = model.getKillAt(rowToDelete).orElse(null);
-						if (selected != null && Kill.TYPE_JOINED.equalsIgnoreCase(selected.getType()))
+						SplitEvent selected = model.getEventAt(rowToDelete).orElse(null);
+						if (selected != null && SplitEvent.TYPE_JOINED.equalsIgnoreCase(selected.getType()))
 						{
 							if (model.hasAssignedSplitsInRosterPeriod(rowToDelete))
 							{
@@ -657,12 +657,12 @@ public class PopoutView extends PanelView
 							}
 						}
 						model.clearPendingRosterDelete();
-						sessionManager.removeKillAt(rowToDelete);
+						sessionManager.removeEventAt(rowToDelete);
 					}
 					else
 					{
 						model.clearPendingRosterDelete();
-						sessionManager.removeKillAt(rowToDelete);
+						sessionManager.removeEventAt(rowToDelete);
 					}
 					model.refresh();
 					controller.refreshAllView();
@@ -689,7 +689,7 @@ public class PopoutView extends PanelView
 
 		private void removeRows(int firstRow, int secondRow)
 		{
-			sessionManager.removeKillsAt(java.util.Arrays.asList(firstRow, secondRow));
+			sessionManager.removeEventsAt(java.util.Arrays.asList(firstRow, secondRow));
 		}
 
 		private void highlightLinkedRosterRows(JTable table, int rowToDelete, int linkedRow)
@@ -749,7 +749,7 @@ public class PopoutView extends PanelView
 
 				if (fromIndex != toIndex)
 				{
-					if (!sessionManager.moveKill(fromIndex, toIndex))
+					if (!sessionManager.moveEvent(fromIndex, toIndex))
 					{
 						toast(PopoutView.this, "Cannot move a left event before that player joined.");
 						return false;

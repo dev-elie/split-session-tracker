@@ -1,5 +1,6 @@
 package com.splitmanager.models;
 
+import com.google.gson.annotations.SerializedName;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -14,27 +15,27 @@ import lombok.Setter;
  * How sessions are tracked overall
  * - The plugin tracks "threads" of activity consisting of a root (mother) session and
  * zero or more child sessions. A new child is created whenever the roster changes AFTER
- * at least one kill has been recorded, preserving historical rosters for split math.
+ * at least one event has been recorded, preserving historical rosters for split math.
  * - The root (mother) session has motherId = null and represents the thread start. The first
- * active child is created immediately when a thread starts so that kills and roster are
+ * active child is created immediately when a thread starts so that events and roster are
  * always associated with a child segment. All subsequent children reference the same motherId.
  * - ManagerSession owns a Map<String, Session> of all sessions and switches the current active
  * child by storing its id. ManagerSession also forks new children on roster changes and
- * appends kills to the active child.
+ * appends events to the active child.
  * <p>
  * What each Session holds
  * - id: unique identifier (UUID string) used as the key in ManagerSession's map and persisted.
  * - start/end: timestamps for this segment; end == null indicates the segment is currently active.
  * - motherId: null for the mother/root; otherwise the id of the mother that all children share.
  * - players: the roster for this segment (names are stored as mains; alts resolved earlier).
- * - kills: ordered list of Kill records attributed during this segment.
+ * - events: ordered list of SplitEvent records attributed during this segment.
  * - settlementConfigAtStart/end: calculation context stored on mother sessions for historical metrics.
  * <p>
  * Lifecycle notes
- * - A thread starts by creating a mother + an initial child (active). Kills are written to the
- * active child only. If a roster mutation happens and the current child already has kills,
+ * - A thread starts by creating a mother + an initial child (active). Events are written to the
+ * active child only. If a roster mutation happens and the current child already has events,
  * ManagerSession ends the current child and creates a new child with a copied roster and the
- * mutation applied. If there are no kills yet, the roster is edited in-place on the current child.
+ * mutation applied. If there are no events yet, the roster is edited in-place on the current child.
  * - Stopping a thread ends the active child, and if the mother is still open, it is ended too.
  * <p>
  * Persistence/serialization
@@ -63,9 +64,10 @@ public class Session
 	 */
 	private final Set<String> players = new LinkedHashSet<>();
 	/**
-	 * Kills recorded during this segment, in insertion order.
+	 * Events recorded during this segment, in insertion order.
 	 */
-	private final List<Kill> kills = new ArrayList<>();
+	@SerializedName(value = "events", alternate = {"kills"})
+	private final List<SplitEvent> events = new ArrayList<>();
 	/**
 	 * When non-null, marks the time this segment was closed. Null implies the segment is active.
 	 */
@@ -105,10 +107,10 @@ public class Session
 	}
 
 	/**
-	 * @return true if at least one kill has been recorded in this segment.
+	 * @return true if at least one event has been recorded in this segment.
 	 */
-	public boolean hasKills()
+	public boolean hasEvents()
 	{
-		return !kills.isEmpty();
+		return !events.isEmpty();
 	}
 }

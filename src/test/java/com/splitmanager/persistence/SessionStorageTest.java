@@ -1,6 +1,7 @@
 package com.splitmanager.persistence;
 
 import com.google.gson.Gson;
+import com.splitmanager.models.SplitEvent;
 import com.splitmanager.models.Session;
 import com.splitmanager.utils.InstantTypeAdapter;
 import java.io.File;
@@ -44,6 +45,45 @@ public class SessionStorageTest
 		assertTrue(restored.isHistoryLoaded());
 		assertEquals(1, restored.getSessions().size());
 		assertEquals("session-id", restored.getSessions().get(0).getId());
+	}
+
+	@Test
+	public void loadsSchemaOneEventsFromLegacyKillsFieldAndSavesEventsField() throws Exception
+	{
+		File file = temporaryFolder.newFile("legacy-sessions.json");
+		String legacyJson = "{"
+			+ "\"schemaVersion\":1,"
+			+ "\"currentSessionId\":\"session-id\","
+			+ "\"historyLoaded\":true,"
+			+ "\"sessions\":[{"
+			+ "\"id\":\"session-id\","
+			+ "\"start\":\"1970-01-01T00:00:00Z\","
+			+ "\"players\":[\"Alice\"],"
+			+ "\"kills\":[{"
+			+ "\"sessionId\":\"session-id\","
+			+ "\"at\":\"1970-01-01T00:00:01Z\","
+			+ "\"player\":\"Alice\","
+			+ "\"amount\":123"
+			+ "}]"
+			+ "}]"
+			+ "}";
+		Files.write(file.toPath(), Collections.singletonList(legacyJson), StandardCharsets.UTF_8);
+		SessionStorage storage = new SessionStorage(file, gson);
+
+		SessionStorageData restored = storage.load();
+
+		assertEquals(1, restored.getSessions().size());
+		Session restoredSession = restored.getSessions().get(0);
+		assertEquals(1, restoredSession.getEvents().size());
+		SplitEvent restoredEvent = restoredSession.getEvents().get(0);
+		assertEquals("Alice", restoredEvent.getPlayer());
+		assertEquals(123L, restoredEvent.getAmount().longValue());
+
+		assertTrue(storage.save(restored));
+		String savedJson = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+		assertTrue(savedJson.contains("\"schemaVersion\":2"));
+		assertTrue(savedJson.contains("\"events\""));
+		assertFalse(savedJson.contains("\"kills\":"));
 	}
 
 	@Test

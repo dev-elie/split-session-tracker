@@ -8,7 +8,7 @@ import lombok.Setter;
 
 public class SessionStorageData
 {
-	public static final int CURRENT_SCHEMA_VERSION = 1;
+	public static final int CURRENT_SCHEMA_VERSION = 2;
 
 	@Setter
 	@Getter

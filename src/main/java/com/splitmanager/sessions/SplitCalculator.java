@@ -1,6 +1,6 @@
 package com.splitmanager.sessions;
 
-import com.splitmanager.models.Kill;
+import com.splitmanager.models.SplitEvent;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.Session;
 import java.math.BigDecimal;
@@ -102,15 +102,15 @@ public class SplitCalculator
 			perSessionTotals.put(player, 0L);
 		}
 
-		for (Kill kill : part.getKills())
+		for (SplitEvent event : part.getEvents())
 		{
-			if (!kill.isLoot() || kill.getAmount() == null)
+			if (!event.isLoot() || event.getAmount() == null)
 			{
 				continue;
 			}
-			long killAmount = kill.getAmount();
-			long splitAmount = computeSplitAmount(killAmount, geTaxSettings);
-			perSessionTotals.computeIfPresent(kill.getPlayer(), (player, value) -> value + splitAmount);
+			long lootAmount = event.getAmount();
+			long splitAmount = computeSplitAmount(lootAmount, geTaxSettings);
+			perSessionTotals.computeIfPresent(event.getPlayer(), (player, value) -> value + splitAmount);
 		}
 
 		long sessionAverage = sum(perSessionTotals) / perSessionTotals.size();
@@ -131,25 +131,25 @@ public class SplitCalculator
 		}
 	}
 
-	private long computeSplitAmount(long killAmount, GeTaxSettings geTaxSettings)
+	private long computeSplitAmount(long lootAmount, GeTaxSettings geTaxSettings)
 	{
-		if (!geTaxSettings.enabled || killAmount < geTaxSettings.minimumValue)
+		if (!geTaxSettings.enabled || lootAmount < geTaxSettings.minimumValue)
 		{
-			return killAmount;
+			return lootAmount;
 		}
 
-		long geTax = computeGeTax(killAmount, geTaxSettings);
+		long geTax = computeGeTax(lootAmount, geTaxSettings);
 		if (geTax <= 0L)
 		{
-			return killAmount;
+			return lootAmount;
 		}
 
-		return Math.max(killAmount - geTax, 0L);
+		return Math.max(lootAmount - geTax, 0L);
 	}
 
-	private long computeGeTax(long killAmount, GeTaxSettings geTaxSettings)
+	private long computeGeTax(long lootAmount, GeTaxSettings geTaxSettings)
 	{
-		BigDecimal calculated = BigDecimal.valueOf(killAmount)
+		BigDecimal calculated = BigDecimal.valueOf(lootAmount)
 			.multiply(BigDecimal.valueOf(geTaxSettings.percent))
 			.divide(BigDecimal.valueOf(100L), 0, RoundingMode.DOWN);
 		long capped = Math.min(geTaxSettings.maxTaxPerLoot, calculated.longValue());

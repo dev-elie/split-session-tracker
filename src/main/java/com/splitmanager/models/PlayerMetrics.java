@@ -4,7 +4,7 @@ import lombok.Getter;
 
 /**
  * Aggregate row to display per-player totals and split deltas for a session thread.
- * total = sum of that player's kills across all sessions in the thread.
+ * total = sum of that player's events across all sessions in the thread.
  * split = sum over each session in the thread of (avgOfThatSessionRoster - playerTotalInThatSession).
  * activePlayer indicates whether the player is on the provided session's current roster.
  */

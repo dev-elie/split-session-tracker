@@ -1,6 +1,6 @@
 package com.splitmanager.sessions;
 
-import com.splitmanager.models.Kill;
+import com.splitmanager.models.SplitEvent;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.Session;
 import java.time.Instant;
@@ -20,14 +20,14 @@ public class SplitCalculatorTest
 		Session mother = new Session("mother", Instant.EPOCH, null);
 		Session first = new Session("first", Instant.EPOCH.plusSeconds(1), "mother");
 		first.getPlayers().addAll(Arrays.asList("A", "B"));
-		first.getKills().add(new Kill("first", "A", 100000L, Instant.EPOCH.plusSeconds(2)));
-		Kill joined = new Kill("first", "A", 999999L, Instant.EPOCH.plusSeconds(3));
-		joined.setType(Kill.TYPE_JOINED);
-		first.getKills().add(joined);
+		first.getEvents().add(new SplitEvent("first", "A", 100000L, Instant.EPOCH.plusSeconds(2)));
+		SplitEvent joined = new SplitEvent("first", "A", 999999L, Instant.EPOCH.plusSeconds(3));
+		joined.setType(SplitEvent.TYPE_JOINED);
+		first.getEvents().add(joined);
 
 		Session second = new Session("second", Instant.EPOCH.plusSeconds(4), "mother");
 		second.getPlayers().addAll(Arrays.asList("B", "C"));
-		second.getKills().add(new Kill("second", "C", 60000L, Instant.EPOCH.plusSeconds(5)));
+		second.getEvents().add(new SplitEvent("second", "C", 60000L, Instant.EPOCH.plusSeconds(5)));
 
 		List<PlayerMetrics> metrics = new SplitCalculator().compute(
 			second,
@@ -65,7 +65,7 @@ public class SplitCalculatorTest
 		Session mother = new Session("mother", Instant.EPOCH, null);
 		Session current = new Session("current", Instant.EPOCH.plusSeconds(1), "mother");
 		current.getPlayers().addAll(Arrays.asList("A", "B", "C", "D", "E"));
-		current.getKills().add(new Kill("current", "A", 100000000L, Instant.EPOCH.plusSeconds(2)));
+		current.getEvents().add(new SplitEvent("current", "A", 100000000L, Instant.EPOCH.plusSeconds(2)));
 
 		List<PlayerMetrics> metrics = new SplitCalculator().compute(
 			current,
@@ -89,7 +89,7 @@ public class SplitCalculatorTest
 		Session mother = new Session("mother", Instant.EPOCH, null);
 		Session current = new Session("current", Instant.EPOCH.plusSeconds(1), "mother");
 		current.getPlayers().addAll(Arrays.asList("A", "B", "C"));
-		current.getKills().add(new Kill("current", "A", 100000000L, Instant.EPOCH.plusSeconds(2)));
+		current.getEvents().add(new SplitEvent("current", "A", 100000000L, Instant.EPOCH.plusSeconds(2)));
 
 		List<PlayerMetrics> metrics = new SplitCalculator().compute(
 			current,
@@ -111,8 +111,8 @@ public class SplitCalculatorTest
 		Session mother = new Session("mother", Instant.EPOCH, null);
 		Session current = new Session("current", Instant.EPOCH.plusSeconds(1), "mother");
 		current.getPlayers().addAll(Arrays.asList("A", "B"));
-		current.getKills().add(new Kill("current", "A", 14000000L, Instant.EPOCH.plusSeconds(2)));
-		current.getKills().add(new Kill("current", "A", 400000000L, Instant.EPOCH.plusSeconds(3)));
+		current.getEvents().add(new SplitEvent("current", "A", 14000000L, Instant.EPOCH.plusSeconds(2)));
+		current.getEvents().add(new SplitEvent("current", "A", 400000000L, Instant.EPOCH.plusSeconds(3)));
 
 		List<PlayerMetrics> metrics = new SplitCalculator().compute(
 			current,
@@ -136,9 +136,9 @@ public class SplitCalculatorTest
 		Session current = new Session("current", Instant.EPOCH.plusSeconds(1), "mother");
 		current.getPlayers().addAll(Arrays.asList("A", "B"));
 
-		Kill joined = new Kill("current", "A", 100000000L, Instant.EPOCH.plusSeconds(2));
-		joined.setType(Kill.TYPE_JOINED);
-		current.getKills().add(joined);
+		SplitEvent joined = new SplitEvent("current", "A", 100000000L, Instant.EPOCH.plusSeconds(2));
+		joined.setType(SplitEvent.TYPE_JOINED);
+		current.getEvents().add(joined);
 
 		List<PlayerMetrics> metrics = new SplitCalculator().compute(
 			current,

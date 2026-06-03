@@ -63,20 +63,20 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 			case 0:
 				return e.time;
 			case 1:
-				return e.kill.getPlayer();
+				return e.event.getPlayer();
 			case 2:
-				String t = e.kill.getType();
-				if (Kill.TYPE_JOINED.equalsIgnoreCase(t))
+				String t = e.event.getType();
+				if (SplitEvent.TYPE_JOINED.equalsIgnoreCase(t))
 				{
 					return "Joined";
 				}
-				if (Kill.TYPE_LEFT.equalsIgnoreCase(t))
+				if (SplitEvent.TYPE_LEFT.equalsIgnoreCase(t))
 				{
 					return "Left";
 				}
-				return Formats.OsrsAmountFormatter.toSuffixString(cleanSplitAmount(e.kill), 'k');
+				return Formats.OsrsAmountFormatter.toSuffixString(cleanSplitAmount(e.event), 'k');
 			case 3:
-				long geTax = geTaxAmount(e.kill);
+				long geTax = geTaxAmount(e.event);
 				return geTax > 0L ? Formats.OsrsAmountFormatter.toSuffixString(geTax, 'm') : "";
 			default:
 				return "";
@@ -101,7 +101,7 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 		// Disable editing for JOINED/LEFT rows
 		if (rowIndex >= 0 && rowIndex < rows.size())
 		{
-			if (rows.get(rowIndex).kill.isRosterEvent())
+			if (rows.get(rowIndex).event.isRosterEvent())
 			{
 				return false;
 			}
@@ -122,7 +122,7 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 			String v = aValue == null ? null : aValue.toString();
 			if (v != null && !v.isBlank())
 			{
-				e.kill.setPlayer(v.trim());
+				e.event.setPlayer(v.trim());
 			}
 		}
 		else if (columnIndex == 2) // amount (K)
@@ -130,7 +130,7 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 			try
 			{
 				Long k = Formats.OsrsAmountFormatter.stringAmountToLongAmount((String) aValue, config);
-				e.kill.setAmount(k);
+				e.event.setAmount(k);
 			}
 			catch (Exception ex)
 			{
@@ -140,26 +140,26 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 		fireTableRowsUpdated(rowIndex, rowIndex);
 		if (listener != null)
 		{
-			listener.onEdited(e.kill); // pass the edited kill so we know its sessionId
+			listener.onEdited(e.event); // pass the edited event so we know its sessionId
 		}
 	}
 
-	private long cleanSplitAmount(Kill kill)
+	private long cleanSplitAmount(SplitEvent event)
 	{
-		if (kill == null || kill.getAmount() == null)
+		if (event == null || event.getAmount() == null)
 		{
 			return 0L;
 		}
-		return Math.max(kill.getAmount() - geTaxAmount(kill), 0L);
+		return Math.max(event.getAmount() - geTaxAmount(event), 0L);
 	}
 
-	private long geTaxAmount(Kill kill)
+	private long geTaxAmount(SplitEvent event)
 	{
 		if (geTaxSettings != null)
 		{
-			return geTaxAmount(kill, geTaxSettings);
+			return geTaxAmount(event, geTaxSettings);
 		}
-		if (kill == null || !kill.isLoot() || kill.getAmount() == null || !accountForGeTax())
+		if (event == null || !event.isLoot() || event.getAmount() == null || !accountForGeTax())
 		{
 			return 0L;
 		}
@@ -172,29 +172,29 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 		{
 			return 0L;
 		}
-		if (kill.getAmount() < geTaxMinimumValue())
+		if (event.getAmount() < geTaxMinimumValue())
 		{
 			return 0L;
 		}
-		BigDecimal calculated = BigDecimal.valueOf(kill.getAmount())
+		BigDecimal calculated = BigDecimal.valueOf(event.getAmount())
 			.multiply(BigDecimal.valueOf(percent))
 			.divide(BigDecimal.valueOf(100L), 0, RoundingMode.DOWN);
 		long capped = Math.min(geTaxMaxPerLoot(), calculated.longValue());
 		return Math.max(capped, 0L);
 	}
 
-	private long geTaxAmount(Kill kill, SplitCalculator.GeTaxSettings settings)
+	private long geTaxAmount(SplitEvent event, SplitCalculator.GeTaxSettings settings)
 	{
-		if (kill == null
-			|| !kill.isLoot()
-			|| kill.getAmount() == null
+		if (event == null
+			|| !event.isLoot()
+			|| event.getAmount() == null
 			|| settings == null
 			|| !settings.isEnabled()
-			|| kill.getAmount() < settings.getMinimumValue())
+			|| event.getAmount() < settings.getMinimumValue())
 		{
 			return 0L;
 		}
-		BigDecimal calculated = BigDecimal.valueOf(kill.getAmount())
+		BigDecimal calculated = BigDecimal.valueOf(event.getAmount())
 			.multiply(BigDecimal.valueOf(settings.getPercent()))
 			.divide(BigDecimal.valueOf(100L), 0, RoundingMode.DOWN);
 		long capped = Math.min(settings.getMaxTaxPerLoot(), calculated.longValue());
@@ -269,13 +269,13 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 		return config == null ? PluginConfig.DEFAULT_GE_TAX_PERCENT : config.geTaxPercent();
 	}
 
-	// Optionally expose a getter to let editors query the kill of a row:
-	public Kill getKillAt(int rowIndex)
+	// Optionally expose a getter to let editors query the event of a row:
+	public SplitEvent getEventAt(int rowIndex)
 	{
-		return (rowIndex >= 0 && rowIndex < rows.size()) ? rows.get(rowIndex).kill : null;
+		return (rowIndex >= 0 && rowIndex < rows.size()) ? rows.get(rowIndex).event : null;
 	}
 
-	private void addEntry(Kill k)
+	private void addEntry(SplitEvent k)
 	{
 		String timeStr = "";
 		if (k.getAt() != null)
@@ -287,16 +287,16 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 		fireTableDataChanged();
 	}
 
-	public void setFromKills(java.util.List<Kill> kills)
+	public void setFromEvents(java.util.List<SplitEvent> events)
 	{
 		clear();
-		if (kills == null || kills.isEmpty())
+		if (events == null || events.isEmpty())
 		{
 			fireTableDataChanged();
 			return;
 		}
 		// Iterate from oldest to newest
-		for (Kill k : kills)
+		for (SplitEvent k : events)
 		{
 			addEntry(k);
 		}
@@ -311,17 +311,17 @@ public final class RecentSplitsTable extends javax.swing.table.AbstractTableMode
 
 	public interface Listener
 	{
-		void onEdited(Kill editedKill);
+		void onEdited(SplitEvent editedEvent);
 	}
 
 	private static final class Row
 	{
-		final Kill kill; // keep reference for editing
+		final SplitEvent event; // keep reference for editing
 		final String time;
 
-		Row(Kill kill, String time)
+		Row(SplitEvent event, String time)
 		{
-			this.kill = kill;
+			this.event = event;
 			this.time = time;
 		}
 	}

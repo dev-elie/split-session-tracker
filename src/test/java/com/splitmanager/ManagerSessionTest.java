@@ -1,7 +1,7 @@
 package com.splitmanager;
 
 import com.google.gson.Gson;
-import com.splitmanager.models.Kill;
+import com.splitmanager.models.SplitEvent;
 import com.splitmanager.models.PendingValue;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.Session;
@@ -86,13 +86,13 @@ public class ManagerSessionTest
 			.orElseThrow(() -> new AssertionError("Missing metric for " + player));
 	}
 
-	private int findKillIndex(String type, String player)
+	private int findEventIndex(String type, String player)
 	{
-		List<Kill> kills = managerSession.getAllKills();
-		for (int i = kills.size() - 1; i >= 0; i--)
+		List<SplitEvent> events = managerSession.getAllEvents();
+		for (int i = events.size() - 1; i >= 0; i--)
 		{
-			Kill kill = kills.get(i);
-			if (type.equalsIgnoreCase(kill.getType()) && player.equalsIgnoreCase(kill.getPlayer()))
+			SplitEvent event = events.get(i);
+			if (type.equalsIgnoreCase(event.getType()) && player.equalsIgnoreCase(event.getPlayer()))
 			{
 				return i;
 			}
@@ -156,7 +156,7 @@ public class ManagerSessionTest
 		String p1 = "Player1";
 		resolveToSelf(p1);
 		managerSession.addPlayerToActive(p1);
-		managerSession.addKill(p1, 100000L);
+		managerSession.addLoot(p1, 100000L);
 		managerSession.stopSession();
 
 		Session sourceRoot = managerSession.getHistorySessionsNewestFirst().get(0);
@@ -180,9 +180,9 @@ public class ManagerSessionTest
 			.orElse(null);
 		assertNotNull(importedChild);
 		assertEquals(importedRoot.getId(), importedChild.getMotherId());
-		assertEquals(2, importedChild.getKills().size());
-		assertTrue(importedChild.getKills().stream().anyMatch(kill -> p1.equals(kill.getPlayer()) && Long.valueOf(100000L).equals(kill.getAmount())));
-		assertTrue(importedChild.getKills().stream().allMatch(kill -> importedChild.getId().equals(kill.getSessionId())));
+		assertEquals(2, importedChild.getEvents().size());
+		assertTrue(importedChild.getEvents().stream().anyMatch(event -> p1.equals(event.getPlayer()) && Long.valueOf(100000L).equals(event.getAmount())));
+		assertTrue(importedChild.getEvents().stream().allMatch(event -> importedChild.getId().equals(event.getSessionId())));
 	}
 
 	@Test
@@ -246,8 +246,8 @@ public class ManagerSessionTest
 		boolean applied = managerSession.applyPendingValueToPlayer(pv.getId(), playerName);
 		assertTrue(applied);
 		assertEquals(0, managerSession.getPendingValues().size());
-		// Verify kill was added (implicitly via session state)
-		assertTrue(requireSession(managerSession.getCurrentSession()).hasKills());
+		// Verify event was added (implicitly via session state)
+		assertTrue(requireSession(managerSession.getCurrentSession()).hasEvents());
 	}
 
 	@Test
@@ -554,13 +554,13 @@ public class ManagerSessionTest
 		managerSession.loadHistory(historyRoot.getId());
 
 		assertTrue(managerSession.addPlayerToActive("Player2"));
-		assertTrue(managerSession.addKill("Player2", 100000L));
+		assertTrue(managerSession.addLoot("Player2", 100000L));
 		assertTrue(managerSession.isHistoryDirty());
 
 		Session editable = requireSession(managerSession.getCurrentEditableSession());
 		assertTrue(editable.getPlayers().contains("Player2"));
-		assertTrue(managerSession.getAllKills().stream()
-			.anyMatch(kill -> "Player2".equals(kill.getPlayer()) && Long.valueOf(100000L).equals(kill.getAmount())));
+		assertTrue(managerSession.getAllEvents().stream()
+			.anyMatch(event -> "Player2".equals(event.getPlayer()) && Long.valueOf(100000L).equals(event.getAmount())));
 	}
 
 	@Test
@@ -585,7 +585,7 @@ public class ManagerSessionTest
 		managerSession.addPendingValue(pv1);
 		managerSession.applyPendingValueToPlayer(pv1.getId(), p1);
 
-		// Segment 2: Add P3 (forks because Segment 1 has kills)
+		// Segment 2: Add P3 (forks because Segment 1 has events)
 		managerSession.addPlayerToActive(p3);
 
 		// P2 drops 300k
@@ -593,7 +593,7 @@ public class ManagerSessionTest
 		managerSession.addPendingValue(pv2);
 		managerSession.applyPendingValueToPlayer(pv2.getId(), p2);
 
-		// Segment 3: Remove P1 (forks because Segment 2 has kills)
+		// Segment 3: Remove P1 (forks because Segment 2 has events)
 		managerSession.removePlayerFromSession(p1);
 
 		// P3 drops 60k
@@ -886,21 +886,21 @@ public class ManagerSessionTest
 	}
 
 	@Test
-	public void testAddKillRejectsInvalidStatesAndPlayers()
+	public void testAddLootRejectsInvalidStatesAndPlayers()
 	{
-		assertFalse(managerSession.addKill("Ghost", 1L));
+		assertFalse(managerSession.addLoot("Ghost", 1L));
 
 		managerSession.startSession();
 		when(playerManager.getMainName("Ghost")).thenReturn("Ghost");
-		assertFalse(managerSession.addKill("Ghost", 1L));
+		assertFalse(managerSession.addLoot("Ghost", 1L));
 
 		String p1 = "Player1";
 		resolveToSelf(p1);
 		assertTrue(managerSession.addPlayerToActive(p1));
-		assertTrue(managerSession.addKill(p1, 42L));
-		assertFalse(managerSession.addKill(p1, null));
+		assertTrue(managerSession.addLoot(p1, 42L));
+		assertFalse(managerSession.addLoot(p1, null));
 
-		assertFalse(managerSession.addKill(" ", 42L));
+		assertFalse(managerSession.addLoot(" ", 42L));
 	}
 
 	@Test
@@ -916,7 +916,7 @@ public class ManagerSessionTest
 		managerSession.addPendingValue(pv);
 
 		assertTrue(managerSession.getPendingValues().isEmpty());
-		assertTrue(requireSession(managerSession.getCurrentSession()).getKills().stream()
+		assertTrue(requireSession(managerSession.getCurrentSession()).getEvents().stream()
 			.anyMatch(k -> p1.equals(k.getPlayer()) && Long.valueOf(50000L).equals(k.getAmount())));
 	}
 
@@ -957,22 +957,22 @@ public class ManagerSessionTest
 	}
 
 	@Test
-	public void testGetAllKillsUsesCacheAndRebuildsAfterLoad()
+	public void testGetAllEventsUsesCacheAndRebuildsAfterLoad()
 	{
-		assertTrue(managerSession.getAllKills().isEmpty());
+		assertTrue(managerSession.getAllEvents().isEmpty());
 
 		managerSession.startSession();
 		String p1 = "Player1";
 		resolveToSelf(p1);
 		managerSession.addPlayerToActive(p1);
-		managerSession.addKill(p1, 100000L);
+		managerSession.addLoot(p1, 100000L);
 
-		List<Kill> cached = managerSession.getAllKills();
+		List<SplitEvent> cached = managerSession.getAllEvents();
 		assertTrue(cached.size() >= 2);
 		try
 		{
-			cached.add(new Kill("ignored", p1, 1L, Instant.now()));
-			fail("Cached kills should be unmodifiable");
+			cached.add(new SplitEvent("ignored", p1, 1L, Instant.now()));
+			fail("Cached events should be unmodifiable");
 		}
 		catch (UnsupportedOperationException expected)
 		{
@@ -986,52 +986,52 @@ public class ManagerSessionTest
 		ManagerSession reloaded = new ManagerSession(config, playerManager, pluginManager, gson);
 		reloaded.loadFromConfig();
 
-		assertEquals(cached.size(), reloaded.getAllKills().size());
+		assertEquals(cached.size(), reloaded.getAllEvents().size());
 	}
 
 	@Test
-	public void testMoveKillReordersWithinSessionAndAllowsDropAfterLastRow()
+	public void testMoveEventReordersWithinSessionAndAllowsDropAfterLastRow()
 	{
 		managerSession.startSession();
 		String p1 = "Player1";
 		resolveToSelf(p1);
 		managerSession.addPlayerToActive(p1);
-		managerSession.addKill(p1, 100000L);
-		managerSession.addKill(p1, 200000L);
+		managerSession.addLoot(p1, 100000L);
+		managerSession.addLoot(p1, 200000L);
 
-		managerSession.moveKill(1, 3);
+		managerSession.moveEvent(1, 3);
 
-		List<Kill> kills = managerSession.getAllKills();
-		assertEquals(0L, kills.get(0).getAmount().longValue());
-		assertEquals(200000L, kills.get(1).getAmount().longValue());
-		assertEquals(100000L, kills.get(2).getAmount().longValue());
+		List<SplitEvent> events = managerSession.getAllEvents();
+		assertEquals(0L, events.get(0).getAmount().longValue());
+		assertEquals(200000L, events.get(1).getAmount().longValue());
+		assertEquals(100000L, events.get(2).getAmount().longValue());
 	}
 
 	@Test
-	public void testMoveKillAcrossSessionSegmentsUsesTargetSegment()
+	public void testMoveEventAcrossSessionSegmentsUsesTargetSegment()
 	{
 		managerSession.startSession();
 		String p1 = "Player1";
 		String p2 = "Player2";
 		resolveToSelf(p1, p2);
 		managerSession.addPlayerToActive(p1);
-		managerSession.addKill(p1, 100000L);
+		managerSession.addLoot(p1, 100000L);
 		managerSession.addPlayerToActive(p2);
-		managerSession.addKill(p2, 200000L);
+		managerSession.addLoot(p2, 200000L);
 
-		managerSession.moveKill(1, 4);
+		managerSession.moveEvent(1, 4);
 
-		List<Kill> kills = managerSession.getAllKills();
-		assertEquals(4, kills.size());
-		assertEquals(0L, kills.get(0).getAmount().longValue());
-		assertEquals(0L, kills.get(1).getAmount().longValue());
-		assertEquals(200000L, kills.get(2).getAmount().longValue());
-		assertEquals(100000L, kills.get(3).getAmount().longValue());
-		assertEquals(kills.get(2).getSessionId(), kills.get(3).getSessionId());
+		List<SplitEvent> events = managerSession.getAllEvents();
+		assertEquals(4, events.size());
+		assertEquals(0L, events.get(0).getAmount().longValue());
+		assertEquals(0L, events.get(1).getAmount().longValue());
+		assertEquals(200000L, events.get(2).getAmount().longValue());
+		assertEquals(100000L, events.get(3).getAmount().longValue());
+		assertEquals(events.get(2).getSessionId(), events.get(3).getSessionId());
 	}
 
 	@Test
-	public void testMoveKillRejectsLeftBeforeJoined()
+	public void testMoveEventRejectsLeftBeforeJoined()
 	{
 		managerSession.startSession();
 		String p1 = "Player1";
@@ -1042,17 +1042,17 @@ public class ManagerSessionTest
 		managerSession.addPlayerToActive(p2);
 		assertTrue(managerSession.removePlayerFromSession(p2));
 
-		List<Kill> before = managerSession.getAllKills();
+		List<SplitEvent> before = managerSession.getAllEvents();
 		int joinedIndex = -1;
 		int leftIndex = -1;
 		for (int i = 0; i < before.size(); i++)
 		{
-			Kill kill = before.get(i);
-			if (p2.equals(kill.getPlayer()) && Kill.TYPE_JOINED.equals(kill.getType()))
+			SplitEvent event = before.get(i);
+			if (p2.equals(event.getPlayer()) && SplitEvent.TYPE_JOINED.equals(event.getType()))
 			{
 				joinedIndex = i;
 			}
-			if (p2.equals(kill.getPlayer()) && Kill.TYPE_LEFT.equals(kill.getType()))
+			if (p2.equals(event.getPlayer()) && SplitEvent.TYPE_LEFT.equals(event.getType()))
 			{
 				leftIndex = i;
 			}
@@ -1060,12 +1060,12 @@ public class ManagerSessionTest
 		assertTrue(joinedIndex >= 0);
 		assertTrue(leftIndex > joinedIndex);
 
-		assertFalse(managerSession.moveKill(leftIndex, joinedIndex));
+		assertFalse(managerSession.moveEvent(leftIndex, joinedIndex));
 
-		List<Kill> after = managerSession.getAllKills();
-		assertEquals(Kill.TYPE_JOINED, after.get(joinedIndex).getType());
+		List<SplitEvent> after = managerSession.getAllEvents();
+		assertEquals(SplitEvent.TYPE_JOINED, after.get(joinedIndex).getType());
 		assertEquals(p2, after.get(joinedIndex).getPlayer());
-		assertEquals(Kill.TYPE_LEFT, after.get(leftIndex).getType());
+		assertEquals(SplitEvent.TYPE_LEFT, after.get(leftIndex).getType());
 		assertEquals(p2, after.get(leftIndex).getPlayer());
 	}
 
@@ -1080,15 +1080,15 @@ public class ManagerSessionTest
 
 		managerSession.addPlayerToActive(p1);
 		managerSession.addPlayerToActive(p2);
-		managerSession.addKill(p1, 100000L);
+		managerSession.addLoot(p1, 100000L);
 		assertTrue(managerSession.removePlayerFromSession(p2));
 		assertFalse(requireSession(managerSession.getCurrentSession()).getPlayers().contains(p2));
 
-		List<Kill> kills = managerSession.getAllKills();
+		List<SplitEvent> events = managerSession.getAllEvents();
 		int leftIndex = -1;
-		for (int i = 0; i < kills.size(); i++)
+		for (int i = 0; i < events.size(); i++)
 		{
-			if (Kill.TYPE_LEFT.equals(kills.get(i).getType()) && p2.equals(kills.get(i).getPlayer()))
+			if (SplitEvent.TYPE_LEFT.equals(events.get(i).getType()) && p2.equals(events.get(i).getPlayer()))
 			{
 				leftIndex = i;
 				break;
@@ -1096,7 +1096,7 @@ public class ManagerSessionTest
 		}
 		assertTrue(leftIndex >= 0);
 
-		managerSession.removeKillAt(leftIndex);
+		managerSession.removeEventAt(leftIndex);
 
 		assertTrue(requireSession(managerSession.getCurrentSession()).getPlayers().contains(p2));
 		List<PlayerMetrics> metrics = managerSession.computeMetricsFor(requireSession(managerSession.getCurrentSession()), true);
@@ -1121,7 +1121,7 @@ public class ManagerSessionTest
 	}
 
 	@Test
-	public void testRemoveKillsRepairsRosterAcrossJoinAndLeaveEventsInHistoryMode()
+	public void testRemoveEventsRepairsRosterAcrossJoinAndLeaveEventsInHistoryMode()
 	{
 		managerSession.startSession();
 		resolveToSelf("Player1", "Player2");
@@ -1135,38 +1135,38 @@ public class ManagerSessionTest
 		managerSession.addPlayerToActive("Player2");
 		managerSession.removePlayerFromSession("Player2");
 
-		int joinedIndex = findKillIndex(Kill.TYPE_JOINED, "Player2");
-		int leftIndex = findKillIndex(Kill.TYPE_LEFT, "Player2");
+		int joinedIndex = findEventIndex(SplitEvent.TYPE_JOINED, "Player2");
+		int leftIndex = findEventIndex(SplitEvent.TYPE_LEFT, "Player2");
 		assertTrue(joinedIndex >= 0);
 		assertTrue(leftIndex >= 0);
 
-		managerSession.removeKillsAt(Arrays.asList(joinedIndex, leftIndex));
+		managerSession.removeEventsAt(Arrays.asList(joinedIndex, leftIndex));
 
 		Session current = requireSession(managerSession.getCurrentSession());
-		assertFalse(managerSession.getAllKills().stream().anyMatch(kill ->
-			"Player2".equalsIgnoreCase(kill.getPlayer()) && kill.isRosterEvent()));
+		assertFalse(managerSession.getAllEvents().stream().anyMatch(event ->
+			"Player2".equalsIgnoreCase(event.getPlayer()) && event.isRosterEvent()));
 	}
 
 	@Test
-	public void testInsertAndMoveKillEdgeCases()
+	public void testInsertAndMoveEventEdgeCases()
 	{
 		managerSession.startSession();
 		resolveToSelf("Player1", "Player2");
 
 		managerSession.addPlayerToActive("Player1");
 		managerSession.addPlayerToActive("Player2");
-		managerSession.addKill("Player1", 100L);
+		managerSession.addLoot("Player1", 100L);
 
-		managerSession.insertKillAt(0, "Player1", 250L);
-		assertTrue(managerSession.getAllKills().stream().anyMatch(kill ->
-			Long.valueOf(250L).equals(kill.getAmount()) && Kill.TYPE_LOOT.equalsIgnoreCase(kill.getType())));
+		managerSession.insertLootAt(0, "Player1", 250L);
+		assertTrue(managerSession.getAllEvents().stream().anyMatch(event ->
+			Long.valueOf(250L).equals(event.getAmount()) && SplitEvent.TYPE_LOOT.equalsIgnoreCase(event.getType())));
 
-		assertFalse(managerSession.moveKill(-1, 0));
-		assertFalse(managerSession.moveKill(0, 0));
+		assertFalse(managerSession.moveEvent(-1, 0));
+		assertFalse(managerSession.moveEvent(0, 0));
 
-		int insertIndex = findKillIndex(Kill.TYPE_LOOT, "Player1");
+		int insertIndex = findEventIndex(SplitEvent.TYPE_LOOT, "Player1");
 		assertTrue(insertIndex >= 0);
-		assertTrue(managerSession.moveKill(insertIndex, 0));
+		assertTrue(managerSession.moveEvent(insertIndex, 0));
 	}
 
 	@Test
@@ -1180,7 +1180,7 @@ public class ManagerSessionTest
 		PendingValue autoApply = PendingValue.of(PendingValue.Type.ADD, "Clan", "!add 50", 50000L, "Player1");
 		managerSession.addPendingValue(autoApply);
 
-		assertTrue(requireSession(managerSession.getCurrentSession()).hasKills());
+		assertTrue(requireSession(managerSession.getCurrentSession()).hasEvents());
 		assertTrue(managerSession.getPendingValues().isEmpty());
 
 		when(config.autoApplyWhenInSession()).thenReturn(false);

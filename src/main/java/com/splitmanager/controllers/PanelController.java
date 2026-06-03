@@ -186,31 +186,31 @@ public class PanelController implements PanelActions
 	}
 
 	@Override
-	public void addKill(String player, long amount)
+	public void addLoot(String player, long amount)
 	{
 		if (player == null)
 		{
 			toast(view, "Select a player.");
 			return;
 		}
-		if (sessionManager.addKill(player, amount))
+		if (sessionManager.addLoot(player, amount))
 		{
-			view.getKillAmountField().setText("");
+			view.getLootAmountField().setText("");
 			managerPanel.refreshAllView();
 		}
 		else
 		{
-			toast(view, "Failed to add kill (is player in session?).");
+			toast(view, "Failed to add loot (is player in session?).");
 		}
 		refreshAllView();
 	}
 
 	@Override
-	public void addKillFromInputs()
+	public void addLootFromInputs()
 	{
 		String player = (String) view.getCurrentSessionPlayerDropdown().getSelectedItem();
 
-		Object rawValue = view.getKillAmountField().getValue();
+		Object rawValue = view.getLootAmountField().getValue();
 		if (rawValue == null)
 		{
 			toast(view, "Please enter a valid amount.");
@@ -229,12 +229,12 @@ public class PanelController implements PanelActions
 			{
 				amt = Formats.OsrsAmountFormatter.stringAmountToLongAmount(val, config);
 			}
-			log.debug("Adding kill for {} with amount {}", player, amt);
-			addKill(player, amt);
+			log.debug("Adding loot for {} with amount {}", player, amt);
+			addLoot(player, amt);
 		}
 		catch (Exception ex)
 		{
-			log.warn("Invalid kill amount {}", val, ex);
+			log.warn("Invalid loot amount {}", val, ex);
 			toast(view, "Invalid amount.");
 		}
 	}
@@ -602,7 +602,7 @@ public class PanelController implements PanelActions
 			);
 			view.refreshMetrics();
 		}
-		// Keep the recent splits list up-to-date (it shows all kills)
+		// Keep the recent splits list up-to-date (it shows all events)
 		refreshRecentSplits(target);
 	}
 
@@ -812,7 +812,7 @@ public class PanelController implements PanelActions
 	private void refreshRecentSplits(Session contextSession)
 	{
 		view.getRecentSplitsModel().setSettlementConfigSnapshot(sessionManager.getSettlementConfigSnapshotFor(contextSession));
-		view.getRecentSplitsModel().setFromKills(sessionManager.getAllKills());
+		view.getRecentSplitsModel().setFromEvents(sessionManager.getAllEvents());
 	}
 
 	private void applyHistorySettlementContextToView(SettlementConfigSnapshot snapshot)
@@ -827,7 +827,7 @@ public class PanelController implements PanelActions
 		);
 		view.refreshMetricsContent();
 		view.getRecentSplitsModel().setGeTaxSettings(sessionManager.getGeTaxSettingsFor(snapshot));
-		view.getRecentSplitsModel().setFromKills(sessionManager.getAllKills());
+		view.getRecentSplitsModel().setFromEvents(sessionManager.getAllEvents());
 	}
 
 	private void refreshHistorySettlementContext()
@@ -891,8 +891,8 @@ public class PanelController implements PanelActions
 
 		boolean hasSessionPlayers = view.getCurrentSessionPlayerDropdown().getItemCount() > 0;
 
-		view.getBtnAddKill().setEnabled(canMutateSession && hasSessionPlayers);
-		view.getKillAmountField().setEnabled(canMutateSession && hasSessionPlayers);
+		view.getBtnAddLoot().setEnabled(canMutateSession && hasSessionPlayers);
+		view.getLootAmountField().setEnabled(canMutateSession && hasSessionPlayers);
 
 		int waitlistRows = view.getWaitlistTableModel().getRowCount();
 

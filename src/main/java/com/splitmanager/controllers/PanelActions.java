@@ -39,17 +39,17 @@ public interface PanelActions
 	void removeKnownPlayer(String name);
 
 	/**
-	 * Record a kill amount for a player.
+	 * Record a loot amount for a player.
 	 *
 	 * @param player player name
 	 * @param amount amount (may be negative if allowed by config)
 	 */
-	void addKill(String player, long amount);
+	void addLoot(String player, long amount);
 
 	/**
-	 * Read current inputs from the view and record a kill.
+	 * Read current inputs from the view and record a event.
 	 */
-	void addKillFromInputs();
+	void addLootFromInputs();
 
 	/**
 	 * Link an alt to a main account.

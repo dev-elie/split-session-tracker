@@ -46,7 +46,7 @@ def jacocoUnitTestExcludes = [
 	'com/splitmanager/ManagerPanel*',
 	'com/splitmanager/PluginConfig*',
 	'com/splitmanager/controllers/**',
-	'com/splitmanager/models/Kill*',
+	'com/splitmanager/models/SplitEvent*',
 	'com/splitmanager/models/PendingValue*',
 	'com/splitmanager/models/PlayerMetrics*',
 	'com/splitmanager/models/Transfer*',

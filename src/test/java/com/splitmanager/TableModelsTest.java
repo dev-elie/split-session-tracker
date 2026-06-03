@@ -1,7 +1,7 @@
 package com.splitmanager;
 
 import com.google.gson.Gson;
-import com.splitmanager.models.Kill;
+import com.splitmanager.models.SplitEvent;
 import com.splitmanager.models.Metrics;
 import com.splitmanager.models.PendingValue;
 import com.splitmanager.models.PlayerMetrics;
@@ -79,13 +79,13 @@ public class TableModelsTest
 	public void testRecentSplitsTableDisplaysEventsAndLootNewestFirst()
 	{
 		RecentSplitsTable table = new RecentSplitsTable(mock(PluginConfig.class));
-		Kill loot = new Kill("session", "Alice", 150000L, Instant.parse("2024-01-01T00:00:00Z"));
-		Kill joined = new Kill("session", "Bob", 0L, Instant.parse("2024-01-01T00:01:00Z"));
+		SplitEvent loot = new SplitEvent("session", "Alice", 150000L, Instant.parse("2024-01-01T00:00:00Z"));
+		SplitEvent joined = new SplitEvent("session", "Bob", 0L, Instant.parse("2024-01-01T00:01:00Z"));
 		joined.setType("JOINED");
-		Kill left = new Kill("session", "Cara", 0L, Instant.parse("2024-01-01T00:02:00Z"));
+		SplitEvent left = new SplitEvent("session", "Cara", 0L, Instant.parse("2024-01-01T00:02:00Z"));
 		left.setType("LEFT");
 
-		table.setFromKills(Arrays.asList(loot, joined, left));
+		table.setFromEvents(Arrays.asList(loot, joined, left));
 
 		assertEquals(3, table.getRowCount());
 		assertEquals(4, table.getColumnCount());
@@ -111,12 +111,12 @@ public class TableModelsTest
 		assertTrue(table.isCellEditable(2, 2));
 		assertFalse(table.isCellEditable(2, 0));
 		assertFalse(table.isCellEditable(2, 3));
-		assertSame(loot, table.getKillAt(2));
-		assertNull(table.getKillAt(-1));
+		assertSame(loot, table.getEventAt(2));
+		assertNull(table.getEventAt(-1));
 
 		table.clear();
 		assertEquals(0, table.getRowCount());
-		table.setFromKills(null);
+		table.setFromEvents(null);
 		assertEquals(0, table.getRowCount());
 	}
 
@@ -128,12 +128,12 @@ public class TableModelsTest
 		when(config.geTaxMinimumValue()).thenReturn("15m");
 		when(config.geTaxPercent()).thenReturn(2.0d);
 		RecentSplitsTable table = new RecentSplitsTable(config);
-		Kill untaxed = new Kill("session", "Alice", 14000000L, Instant.parse("2024-01-01T00:00:00Z"));
-		Kill taxed = new Kill("session", "Bob", 100000000L, Instant.parse("2024-01-01T00:01:00Z"));
-		Kill joined = new Kill("session", "Cara", 100000000L, Instant.parse("2024-01-01T00:02:00Z"));
+		SplitEvent untaxed = new SplitEvent("session", "Alice", 14000000L, Instant.parse("2024-01-01T00:00:00Z"));
+		SplitEvent taxed = new SplitEvent("session", "Bob", 100000000L, Instant.parse("2024-01-01T00:01:00Z"));
+		SplitEvent joined = new SplitEvent("session", "Cara", 100000000L, Instant.parse("2024-01-01T00:02:00Z"));
 		joined.setType("JOINED");
 
-		table.setFromKills(Arrays.asList(untaxed, taxed, joined));
+		table.setFromEvents(Arrays.asList(untaxed, taxed, joined));
 
 		assertEquals("Joined", table.getValueAt(0, 2));
 		assertEquals("", table.getValueAt(0, 3));
@@ -152,9 +152,9 @@ public class TableModelsTest
 		when(config.geTaxPercent()).thenReturn(2.0d);
 		when(config.geTaxMaxPerLoot()).thenReturn("10m");
 		RecentSplitsTable table = new RecentSplitsTable(config);
-		Kill taxed = new Kill("session", "Alice", 1000000000L, Instant.parse("2024-01-01T00:00:00Z"));
+		SplitEvent taxed = new SplitEvent("session", "Alice", 1000000000L, Instant.parse("2024-01-01T00:00:00Z"));
 
-		table.setFromKills(Collections.singletonList(taxed));
+		table.setFromEvents(Collections.singletonList(taxed));
 
 		assertEquals("990,000K", table.getValueAt(0, 2));
 		assertEquals("10M", table.getValueAt(0, 3));
@@ -170,9 +170,9 @@ public class TableModelsTest
 		when(config.geTaxMaxPerLoot()).thenReturn("10m");
 		RecentSplitsTable table = new RecentSplitsTable(config);
 		table.setSettlementConfigSnapshot(new SettlementConfigSnapshot(true, "15m", 2.0d, "5m"));
-		Kill taxed = new Kill("session", "Alice", 100000000L, Instant.parse("2024-01-01T00:00:00Z"));
+		SplitEvent taxed = new SplitEvent("session", "Alice", 100000000L, Instant.parse("2024-01-01T00:00:00Z"));
 
-		table.setFromKills(Collections.singletonList(taxed));
+		table.setFromEvents(Collections.singletonList(taxed));
 
 		assertEquals("98,000K", table.getValueAt(0, 2));
 		assertEquals("2M", table.getValueAt(0, 3));
@@ -182,9 +182,9 @@ public class TableModelsTest
 	public void testRecentSplitsTableEditsLootRowsAndNotifiesListener()
 	{
 		RecentSplitsTable table = new RecentSplitsTable(mock(PluginConfig.class));
-		Kill loot = new Kill("session", "Alice", 150000L, Instant.parse("2024-01-01T00:00:00Z"));
-		table.setFromKills(Collections.singletonList(loot));
-		AtomicReference<Kill> edited = new AtomicReference<>();
+		SplitEvent loot = new SplitEvent("session", "Alice", 150000L, Instant.parse("2024-01-01T00:00:00Z"));
+		table.setFromEvents(Collections.singletonList(loot));
+		AtomicReference<SplitEvent> edited = new AtomicReference<>();
 		table.setListener(edited::set);
 
 		table.setValueAt(" Alice Main ", 0, 1);
@@ -215,8 +215,8 @@ public class TableModelsTest
 		PluginConfig config = mock(PluginConfig.class);
 		when(config.accountForGeTax()).thenReturn(true);
 		RecentSplitsTable table = new RecentSplitsTable(config);
-		Kill taxed = new Kill("session", "Alice", 1000000000L, Instant.parse("2024-01-01T00:00:00Z"));
-		table.setFromKills(Collections.singletonList(taxed));
+		SplitEvent taxed = new SplitEvent("session", "Alice", 1000000000L, Instant.parse("2024-01-01T00:00:00Z"));
+		table.setFromEvents(Collections.singletonList(taxed));
 
 		when(config.geTaxPercent()).thenReturn(Double.NaN);
 		when(config.geTaxMinimumValue()).thenReturn("not-an-amount");
@@ -304,7 +304,7 @@ public class TableModelsTest
 			.create());
 		sessionManager.startSession();
 		sessionManager.addPlayerToActive("Alice");
-		sessionManager.addKill("Alice", 100000L);
+		sessionManager.addLoot("Alice", 100000L);
 		sessionManager.stopSession();
 		String rootId = sessionManager.getHistorySessionsNewestFirst().get(0).getId();
 		sessionManager.loadHistory(rootId);

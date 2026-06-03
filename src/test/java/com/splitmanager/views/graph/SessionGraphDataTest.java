@@ -1,6 +1,6 @@
 package com.splitmanager.views.graph;
 
-import com.splitmanager.models.Kill;
+import com.splitmanager.models.SplitEvent;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.Session;
 import java.time.Instant;
@@ -21,10 +21,10 @@ public class SessionGraphDataTest
 		Session firstChild = new Session("first", start.plusSeconds(1), "mother");
 		Session currentChild = new Session("current", start.plusSeconds(1800), "mother");
 
-		Kill joined = new Kill("first", "Alice", 0L, start.plusSeconds(60));
-		joined.setType(Kill.TYPE_JOINED);
-		Kill firstLoot = new Kill("first", "Alice", 600_000L, start.plusSeconds(1800));
-		Kill secondLoot = new Kill("current", "Bob", 600_000L, start.plusSeconds(3600));
+		SplitEvent joined = new SplitEvent("first", "Alice", 0L, start.plusSeconds(60));
+		joined.setType(SplitEvent.TYPE_JOINED);
+		SplitEvent firstLoot = new SplitEvent("first", "Alice", 600_000L, start.plusSeconds(1800));
+		SplitEvent secondLoot = new SplitEvent("current", "Bob", 600_000L, start.plusSeconds(3600));
 
 		List<PlayerMetrics> metrics = Arrays.asList(
 			new PlayerMetrics("Alice", 600_000L, -100_000L, true),

@@ -6,7 +6,7 @@ import com.splitmanager.ManagerSession;
 import com.splitmanager.PluginConfig;
 import com.splitmanager.controllers.PanelActions;
 import com.splitmanager.controllers.PanelController;
-import com.splitmanager.models.Kill;
+import com.splitmanager.models.SplitEvent;
 import com.splitmanager.models.Metrics;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.RecentSplitsTable;
@@ -99,7 +99,7 @@ public class PanelView extends PluginPanel
 	private final JComboBox<String> knownPlayersDropdown = new JComboBox<>();
 	private final JTextField newPlayerField = new JTextField();
 	private final JLabel historyLabel = new JLabel("History: OFF");
-	private final JFormattedTextField killAmountField = makeOsrsField();
+	private final JFormattedTextField lootAmountField = makeOsrsField();
 	private final JTable metricsTable = new JTable(new Metrics());
 	private final RecentSplitsTable recentSplitsModel;
 	private final WaitlistTable waitlistTableModel = new WaitlistTable();
@@ -114,7 +114,7 @@ public class PanelView extends PluginPanel
 	private final JButton btnAddAlt = new JButton("Add alt");
 	private final JButton btnRemoveAlt = new JButton("Remove alt");
 	private final JButton btnRemovePlayer = new JButton("Remove");
-	private final JButton btnAddKill = new JButton("Add");
+	private final JButton btnAddLoot = new JButton("Add");
 	private final JButton btnStart = new JButton("Start");
 	private final JButton btnStop = new JButton("Stop");
 	private final JPanel historyContextPanel = new JPanel(new GridBagLayout());
@@ -167,7 +167,7 @@ public class PanelView extends PluginPanel
 		btnPopout.addActionListener(e -> onPopoutClicked());
 
 		recentSplitsModel = new RecentSplitsTable(config);
-		recentSplitsModel.setListener(editedKill -> {
+		recentSplitsModel.setListener(editedEvent -> {
 			if (actions != null)
 			{
 				SwingUtilities.invokeLater(() -> actions.refreshSharedViews());
@@ -342,7 +342,7 @@ public class PanelView extends PluginPanel
 			actions.removeSelectedAlt((String) knownPlayersDropdown.getSelectedItem(),
 				altsList.getSelectedValue()));
 
-		btnAddKill.addActionListener(e -> actions.addKillFromInputs());
+		btnAddLoot.addActionListener(e -> actions.addLootFromInputs());
 
 		btnWaitlistAdd.addActionListener(e -> actions.applySelectedPendingValue(waitlistTable.getSelectedRow()));
 		btnWaitlistDelete.addActionListener(e -> actions.deleteSelectedPendingValue(waitlistTable.getSelectedRow()));
@@ -378,15 +378,15 @@ public class PanelView extends PluginPanel
 	private void bindEnterSubmits()
 	{
 		newPlayerField.addActionListener(e -> clickIfEnabled(btnAddPlayer));
-		killAmountField.addActionListener(e -> {
-			if (commitField(killAmountField))
+		lootAmountField.addActionListener(e -> {
+			if (commitField(lootAmountField))
 			{
-				clickIfEnabled(btnAddKill);
+				clickIfEnabled(btnAddLoot);
 			}
 		});
 
 		bindEnterToButton(notInCurrentSessionPlayerDropdown, btnAddToSession);
-		bindEnterToButton(currentSessionPlayerDropdown, btnAddKill);
+		bindEnterToButton(currentSessionPlayerDropdown, btnAddLoot);
 		bindEnterToButton(addAltDropdown, btnAddAlt);
 	}
 
@@ -541,7 +541,7 @@ public class PanelView extends PluginPanel
 			{
 				// Determine players for this row's session
 				String[] choices;
-				Kill k = ((RecentSplitsTable) table.getModel()).getKillAt(row);
+				SplitEvent k = ((RecentSplitsTable) table.getModel()).getEventAt(row);
 				java.util.Set<String> playersForRow = new java.util.LinkedHashSet<>();
 				if (k != null && k.getSessionId() != null)
 				{
@@ -568,13 +568,13 @@ public class PanelView extends PluginPanel
 
 	private JPanel generateAddSplit()
 	{
-		JPanel killPanel = new JPanel();
-		killPanel.setBorder(BorderFactory.createCompoundBorder(
+		JPanel lootPanel = new JPanel();
+		lootPanel.setBorder(BorderFactory.createCompoundBorder(
 			BorderFactory.createTitledBorder("Add split to session:"),
 			BorderFactory.createEmptyBorder(3, 3, 3, 3)));
-		killPanel.setLayout(new GridBagLayout());
+		lootPanel.setLayout(new GridBagLayout());
 
-		GridBagLayout gbl1 = (GridBagLayout) killPanel.getLayout();
+		GridBagLayout gbl1 = (GridBagLayout) lootPanel.getLayout();
 		gbl1.columnWidths = new int[]{dm.width, 0};     // col0 fixed, col1 auto
 		gbl1.columnWeights = new double[]{0.0, 1.0};    // col0 no grow, col1 grows
 
@@ -588,13 +588,13 @@ public class PanelView extends PluginPanel
 
 		JLabel apLabel = new JLabel("Player:");
 		apLabel.setHorizontalAlignment(SwingConstants.RIGHT);
-		killPanel.add(apLabel, gbc);
+		lootPanel.add(apLabel, gbc);
 
 		gbc.gridx = 1;
 		gbc.gridy = 0;
 		gbc.weightx = 1.0;
 		gbc.fill = GridBagConstraints.HORIZONTAL;
-		killPanel.add(currentSessionPlayerDropdown, gbc);
+		lootPanel.add(currentSessionPlayerDropdown, gbc);
 
 		gbc.gridx = 0;
 		gbc.gridy = 1;
@@ -602,24 +602,24 @@ public class PanelView extends PluginPanel
 
 		JLabel amountLabel = new JLabel("Amount:");
 		amountLabel.setHorizontalAlignment(SwingConstants.RIGHT);
-		killPanel.add(amountLabel, gbc);
+		lootPanel.add(amountLabel, gbc);
 
 		gbc.gridx = 1;
 		gbc.gridy = 1;
 		gbc.weightx = 1.0;
 		gbc.fill = GridBagConstraints.HORIZONTAL;
-		killPanel.add(killAmountField, gbc);
+		lootPanel.add(lootAmountField, gbc);
 
 		gbc.gridx = 1;
 		gbc.gridy = 2;
 		gbc.weightx = 1.0;
 		gbc.anchor = GridBagConstraints.EAST;
 		gbc.fill = GridBagConstraints.NONE;
-		btnAddKill.setPreferredSize(dv);
-		btnAddKill.setMinimumSize(dv);
-		killPanel.add(btnAddKill, gbc);
+		btnAddLoot.setPreferredSize(dv);
+		btnAddLoot.setMinimumSize(dv);
+		lootPanel.add(btnAddLoot, gbc);
 
-		return killPanel;
+		return lootPanel;
 	}
 
 	private JPanel generateSessionPlayerManagement()

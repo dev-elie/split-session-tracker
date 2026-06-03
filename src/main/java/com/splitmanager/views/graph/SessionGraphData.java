@@ -1,6 +1,6 @@
 package com.splitmanager.views.graph;
 
-import com.splitmanager.models.Kill;
+import com.splitmanager.models.SplitEvent;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.Session;
 import com.splitmanager.utils.Formats;
@@ -22,7 +22,7 @@ public final class SessionGraphData
 
 	public static SessionGraphSnapshot build(Session currentSession,
 	                                         List<Session> allSessions,
-	                                         List<Kill> kills,
+	                                         List<SplitEvent> events,
 	                                         List<PlayerMetrics> metrics,
 	                                         SessionGraphMode mode,
 	                                         Instant now)
@@ -34,15 +34,15 @@ public final class SessionGraphData
 		}
 
 		Instant safeNow = now == null ? Instant.now() : now;
-		List<Kill> lootKills = safeLootKills(kills);
+		List<SplitEvent> lootEvents = safeLootEvents(events);
 		List<PlayerMetrics> safeMetrics = metrics == null ? List.of() : metrics;
 		List<Session> thread = threadSessions(currentSession, allSessions);
-		Instant start = sessionStart(currentSession, thread, lootKills, safeNow);
-		Instant end = sessionEnd(currentSession, thread, lootKills, safeNow, start);
-		long totalLoot = sumLoot(lootKills);
+		Instant start = sessionStart(currentSession, thread, lootEvents, safeNow);
+		Instant end = sessionEnd(currentSession, thread, lootEvents, safeNow, start);
+		long totalLoot = sumLoot(lootEvents);
 		long gpPerHour = hourlyRate(totalLoot, Duration.between(start, end));
 		PlayerMetrics topPlayer = topPlayer(safeMetrics);
-		List<SessionGraphEntry> entries = entriesFor(selectedMode, lootKills, safeMetrics, start, end, currentSession.isActive());
+		List<SessionGraphEntry> entries = entriesFor(selectedMode, lootEvents, safeMetrics, start, end, currentSession.isActive());
 
 		return new SessionGraphSnapshot(
 			selectedMode,
@@ -56,7 +56,7 @@ public final class SessionGraphData
 	}
 
 	private static List<SessionGraphEntry> entriesFor(SessionGraphMode mode,
-	                                                  List<Kill> lootKills,
+	                                                  List<SplitEvent> lootEvents,
 	                                                  List<PlayerMetrics> metrics,
 	                                                  Instant start,
 	                                                  Instant end,
@@ -80,19 +80,19 @@ public final class SessionGraphData
 					.collect(Collectors.toList());
 			case GP_PER_HOUR:
 			default:
-				return gpPerHourEntries(lootKills, start, end, activeSession);
+				return gpPerHourEntries(lootEvents, start, end, activeSession);
 		}
 	}
 
-	private static List<SessionGraphEntry> gpPerHourEntries(List<Kill> lootKills, Instant start, Instant end, boolean activeSession)
+	private static List<SessionGraphEntry> gpPerHourEntries(List<SplitEvent> lootEvents, Instant start, Instant end, boolean activeSession)
 	{
 		List<SessionGraphEntry> entries = new ArrayList<>();
 		long cumulative = 0L;
 		Instant lastLootAt = null;
-		for (Kill kill : lootKills)
+		for (SplitEvent event : lootEvents)
 		{
-			cumulative += kill.getAmount();
-			Instant at = kill.getAt() == null ? start : kill.getAt();
+			cumulative += event.getAmount();
+			Instant at = event.getAt() == null ? start : event.getAt();
 			lastLootAt = at;
 			long value = hourlyRate(cumulative, Duration.between(start, at));
 			entries.add(new SessionGraphEntry(Formats.getLocalTime().format(at), value, true));
@@ -105,15 +105,15 @@ public final class SessionGraphData
 		return entries;
 	}
 
-	private static List<Kill> safeLootKills(List<Kill> kills)
+	private static List<SplitEvent> safeLootEvents(List<SplitEvent> events)
 	{
-		if (kills == null)
+		if (events == null)
 		{
 			return List.of();
 		}
-		return kills.stream()
-			.filter(kill -> kill != null && kill.isLoot() && kill.getAmount() != null)
-			.sorted(Comparator.comparing(Kill::getAt, Comparator.nullsLast(Comparator.naturalOrder())))
+		return events.stream()
+			.filter(event -> event != null && event.isLoot() && event.getAmount() != null)
+			.sorted(Comparator.comparing(SplitEvent::getAt, Comparator.nullsLast(Comparator.naturalOrder())))
 			.collect(Collectors.toList());
 	}
 
@@ -133,7 +133,7 @@ public final class SessionGraphData
 		return thread;
 	}
 
-	private static Instant sessionStart(Session currentSession, List<Session> thread, List<Kill> lootKills, Instant now)
+	private static Instant sessionStart(Session currentSession, List<Session> thread, List<SplitEvent> lootEvents, Instant now)
 	{
 		for (Session session : thread)
 		{
@@ -153,11 +153,11 @@ public final class SessionGraphData
 		{
 			return currentSession.getStart();
 		}
-		for (Kill kill : lootKills)
+		for (SplitEvent event : lootEvents)
 		{
-			if (kill.getAt() != null)
+			if (event.getAt() != null)
 			{
-				return kill.getAt();
+				return event.getAt();
 			}
 		}
 		return now;
@@ -165,7 +165,7 @@ public final class SessionGraphData
 
 	private static Instant sessionEnd(Session currentSession,
 	                                  List<Session> thread,
-	                                  List<Kill> lootKills,
+	                                  List<SplitEvent> lootEvents,
 	                                  Instant now,
 	                                  Instant start)
 	{
@@ -184,9 +184,9 @@ public final class SessionGraphData
 				}
 			}
 		}
-		for (Kill kill : lootKills)
+		for (SplitEvent event : lootEvents)
 		{
-			Instant at = kill.getAt();
+			Instant at = event.getAt();
 			if (at != null && (end == null || at.isAfter(end)))
 			{
 				end = at;
@@ -203,12 +203,12 @@ public final class SessionGraphData
 		return end;
 	}
 
-	private static long sumLoot(List<Kill> lootKills)
+	private static long sumLoot(List<SplitEvent> lootEvents)
 	{
 		long total = 0L;
-		for (Kill kill : lootKills)
+		for (SplitEvent event : lootEvents)
 		{
-			total += kill.getAmount();
+			total += event.getAmount();
 		}
 		return total;
 	}

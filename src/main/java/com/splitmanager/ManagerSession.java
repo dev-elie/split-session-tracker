@@ -1,7 +1,7 @@
 package com.splitmanager;
 
 import com.google.gson.Gson;
-import com.splitmanager.models.Kill;
+import com.splitmanager.models.SplitEvent;
 import com.splitmanager.models.PendingValue;
 import com.splitmanager.models.PlayerMetrics;
 import com.splitmanager.models.Session;
@@ -48,8 +48,8 @@ public class ManagerSession
 	private final ManagerPlugin pluginManager;
 	private final SessionStorage sessionStorage;
 	private final SplitCalculator splitCalculator;
-	// Cache of all kills grouped by mother session id to avoid recomputing on every UI refresh
-	private final Map<String, List<Kill>> motherKillsCache = new LinkedHashMap<>();
+	// Cache of all events grouped by mother session id to avoid recomputing on every UI refresh
+	private final Map<String, List<SplitEvent>> motherEventsCache = new LinkedHashMap<>();
 	@Setter
 	private BooleanSupplier historyEditWarningHandler;
 	private boolean historyEditWarningAccepted;
@@ -95,17 +95,17 @@ public class ManagerSession
 	}
 
 	/**
-	 * Force a full rebuild of the kills cache for the current session's thread.
+	 * Force a full rebuild of the events cache for the current session's thread.
 	 */
-	public void invalidateKillsCache()
+	public void invalidateEventsCache()
 	{
 		getCurrentSession().ifPresent(curr -> {
 			String motherId = (curr.getMotherId() == null) ? curr.getId() : curr.getMotherId();
-			motherKillsCache.remove(motherId);
+			motherEventsCache.remove(motherId);
 		});
 	}
 
-	public void insertKillAt(int index, String player, Long amount)
+	public void insertLootAt(int index, String player, Long amount)
 	{
 		getCurrentSession().ifPresent(curr -> {
 			if (!prepareHistoryMutation())
@@ -117,39 +117,39 @@ public class ManagerSession
 			{
 				return;
 			}
-			Kill kill = new Kill(curr.getId(), mainPlayer, amount, Instant.now());
-			kill.setType(Kill.TYPE_LOOT);
-			curr.getKills().add(kill);
-			invalidateKillsCache();
+			SplitEvent event = new SplitEvent(curr.getId(), mainPlayer, amount, Instant.now());
+			event.setType(SplitEvent.TYPE_LOOT);
+			curr.getEvents().add(event);
+			invalidateEventsCache();
 			saveAfterMutation();
 		});
 	}
 
-	public void removeKillAt(int index)
+	public void removeEventAt(int index)
 	{
-		removeKillsAt(Collections.singletonList(index));
+		removeEventsAt(Collections.singletonList(index));
 	}
 
-	public void removeKillsAt(List<Integer> indices)
+	public void removeEventsAt(List<Integer> indices)
 	{
-		List<Kill> allKills = getAllKills();
+		List<SplitEvent> allEvents = getAllEvents();
 		if (indices == null || indices.isEmpty())
 		{
 			return;
 		}
-		List<Kill> killsToRemove = new ArrayList<>();
+		List<SplitEvent> eventsToRemove = new ArrayList<>();
 		for (Integer index : indices)
 		{
-			if (index != null && index >= 0 && index < allKills.size())
+			if (index != null && index >= 0 && index < allEvents.size())
 			{
-				Kill kill = allKills.get(index);
-				if (!killsToRemove.contains(kill))
+				SplitEvent event = allEvents.get(index);
+				if (!eventsToRemove.contains(event))
 				{
-					killsToRemove.add(kill);
+					eventsToRemove.add(event);
 				}
 			}
 		}
-		if (killsToRemove.isEmpty())
+		if (eventsToRemove.isEmpty())
 		{
 			return;
 		}
@@ -158,35 +158,35 @@ public class ManagerSession
 			return;
 		}
 
-		repairRostersBeforeRemoving(killsToRemove);
+		repairRostersBeforeRemoving(eventsToRemove);
 		for (Session s : sessions.values())
 		{
-			s.getKills().removeAll(killsToRemove);
+			s.getEvents().removeAll(eventsToRemove);
 		}
-		invalidateKillsCache();
+		invalidateEventsCache();
 		saveAfterMutation();
 	}
 
-	private void repairRostersBeforeRemoving(List<Kill> killsToRemove)
+	private void repairRostersBeforeRemoving(List<SplitEvent> eventsToRemove)
 	{
-		for (Kill kill : killsToRemove)
+		for (SplitEvent event : eventsToRemove)
 		{
-			if (kill == null || !kill.isRosterEvent())
+			if (event == null || !event.isRosterEvent())
 			{
 				continue;
 			}
-			if (Kill.TYPE_LEFT.equalsIgnoreCase(kill.getType()))
+			if (SplitEvent.TYPE_LEFT.equalsIgnoreCase(event.getType()))
 			{
-				addPlayerFromSessionUntilNextEvent(kill.getSessionId(), kill.getPlayer(), killsToRemove);
+				addPlayerFromSessionUntilNextEvent(event.getSessionId(), event.getPlayer(), eventsToRemove);
 			}
-			else if (Kill.TYPE_JOINED.equalsIgnoreCase(kill.getType()))
+			else if (SplitEvent.TYPE_JOINED.equalsIgnoreCase(event.getType()))
 			{
-				removePlayerFromSessionUntilLinkedLeft(kill.getSessionId(), kill.getPlayer(), killsToRemove);
+				removePlayerFromSessionUntilLinkedLeft(event.getSessionId(), event.getPlayer(), eventsToRemove);
 			}
 		}
 	}
 
-	private void addPlayerFromSessionUntilNextEvent(String sessionId, String player, List<Kill> ignoredEvents)
+	private void addPlayerFromSessionUntilNextEvent(String sessionId, String player, List<SplitEvent> ignoredEvents)
 	{
 		if (player == null)
 		{
@@ -202,7 +202,7 @@ public class ManagerSession
 		}
 	}
 
-	private void removePlayerFromSessionUntilLinkedLeft(String sessionId, String player, List<Kill> ignoredEvents)
+	private void removePlayerFromSessionUntilLinkedLeft(String sessionId, String player, List<SplitEvent> ignoredEvents)
 	{
 		if (player == null)
 		{
@@ -216,7 +216,7 @@ public class ManagerSession
 				return;
 			}
 			session.getPlayers().removeIf(existing -> existing.equalsIgnoreCase(player));
-			if (hasIgnoredRosterEventForPlayer(session, player, ignoredEvents, Kill.TYPE_LEFT))
+			if (hasIgnoredRosterEventForPlayer(session, player, ignoredEvents, SplitEvent.TYPE_LEFT))
 			{
 				return;
 			}
@@ -240,13 +240,13 @@ public class ManagerSession
 		return thread.subList(startIndex, thread.size());
 	}
 
-	private boolean hasRosterEventForPlayer(Session session, String player, List<Kill> ignoredEvents)
+	private boolean hasRosterEventForPlayer(Session session, String player, List<SplitEvent> ignoredEvents)
 	{
-		for (Kill kill : session.getKills())
+		for (SplitEvent event : session.getEvents())
 		{
-			if (kill.isRosterEvent()
-				&& !ignoredEvents.contains(kill)
-				&& player.equalsIgnoreCase(kill.getPlayer()))
+			if (event.isRosterEvent()
+				&& !ignoredEvents.contains(event)
+				&& player.equalsIgnoreCase(event.getPlayer()))
 			{
 				return true;
 			}
@@ -254,13 +254,13 @@ public class ManagerSession
 		return false;
 	}
 
-	private boolean hasIgnoredRosterEventForPlayer(Session session, String player, List<Kill> ignoredEvents, @SuppressWarnings("SameParameterValue") String type)
+	private boolean hasIgnoredRosterEventForPlayer(Session session, String player, List<SplitEvent> ignoredEvents, @SuppressWarnings("SameParameterValue") String type)
 	{
-		for (Kill kill : session.getKills())
+		for (SplitEvent event : session.getEvents())
 		{
-			if (ignoredEvents.contains(kill)
-				&& type.equalsIgnoreCase(kill.getType())
-				&& player.equalsIgnoreCase(kill.getPlayer()))
+			if (ignoredEvents.contains(event)
+				&& type.equalsIgnoreCase(event.getType())
+				&& player.equalsIgnoreCase(event.getPlayer()))
 			{
 				return true;
 			}
@@ -280,10 +280,10 @@ public class ManagerSession
 		session.getPlayers().add(player);
 	}
 
-	public boolean moveKill(int fromIndex, int toIndex)
+	public boolean moveEvent(int fromIndex, int toIndex)
 	{
-		List<Kill> allKills = getAllKills();
-		if (fromIndex < 0 || fromIndex >= allKills.size() || toIndex < 0 || toIndex > allKills.size())
+		List<SplitEvent> allEvents = getAllEvents();
+		if (fromIndex < 0 || fromIndex >= allEvents.size() || toIndex < 0 || toIndex > allEvents.size())
 		{
 			return false;
 		}
@@ -292,19 +292,19 @@ public class ManagerSession
 			return false;
 		}
 
-		Kill kill = allKills.get(fromIndex);
-		List<Kill> remainingKills = new ArrayList<>(allKills);
-		remainingKills.remove(fromIndex);
+		SplitEvent event = allEvents.get(fromIndex);
+		List<SplitEvent> remainingEvents = new ArrayList<>(allEvents);
+		remainingEvents.remove(fromIndex);
 
 		int insertionIndex = toIndex;
 		if (fromIndex < insertionIndex)
 		{
 			insertionIndex--;
 		}
-		insertionIndex = Math.min(insertionIndex, remainingKills.size());
-		List<Kill> reorderedKills = new ArrayList<>(remainingKills);
-		reorderedKills.add(insertionIndex, kill);
-		if (!hasValidRosterEventOrder(reorderedKills))
+		insertionIndex = Math.min(insertionIndex, remainingEvents.size());
+		List<SplitEvent> reorderedEvents = new ArrayList<>(remainingEvents);
+		reorderedEvents.add(insertionIndex, event);
+		if (!hasValidRosterEventOrder(reorderedEvents))
 		{
 			return false;
 		}
@@ -314,13 +314,13 @@ public class ManagerSession
 		}
 
 		String targetSessionId = currentSessionId;
-		if (!remainingKills.isEmpty())
+		if (!remainingEvents.isEmpty())
 		{
-			int targetIndex = insertionIndex < remainingKills.size() ? insertionIndex : remainingKills.size() - 1;
-			targetSessionId = remainingKills.get(targetIndex).getSessionId();
+			int targetIndex = insertionIndex < remainingEvents.size() ? insertionIndex : remainingEvents.size() - 1;
+			targetSessionId = remainingEvents.get(targetIndex).getSessionId();
 		}
 
-		removeKillFromSession(kill);
+		removeEventFromSession(event);
 
 		Session targetSession = sessions.get(targetSessionId);
 		if (targetSession == null)
@@ -329,51 +329,51 @@ public class ManagerSession
 		}
 		if (targetSession == null)
 		{
-			invalidateKillsCache();
+			invalidateEventsCache();
 			saveAfterMutation();
 			return true;
 		}
 
-		Kill movedKill = kill;
-		if (!targetSession.getId().equals(kill.getSessionId()))
+		SplitEvent movedEvent = event;
+		if (!targetSession.getId().equals(event.getSessionId()))
 		{
-			movedKill = copyKillForSession(kill, targetSession.getId());
+			movedEvent = copyEventForSession(event, targetSession.getId());
 		}
 
 		int localTargetIndex = 0;
 		for (int i = 0; i < insertionIndex; i++)
 		{
-			if (targetSession.getId().equals(remainingKills.get(i).getSessionId()))
+			if (targetSession.getId().equals(remainingEvents.get(i).getSessionId()))
 			{
 				localTargetIndex++;
 			}
 		}
-		targetSession.getKills().add(localTargetIndex, movedKill);
+		targetSession.getEvents().add(localTargetIndex, movedEvent);
 
-		invalidateKillsCache();
+		invalidateEventsCache();
 		saveAfterMutation();
 		return true;
 	}
 
-	private boolean hasValidRosterEventOrder(List<Kill> kills)
+	private boolean hasValidRosterEventOrder(List<SplitEvent> events)
 	{
 		Map<String, Boolean> seenJoinByPlayer = new LinkedHashMap<>();
-		Set<String> playersWithJoin = kills.stream()
-			.filter(kill -> kill != null && Kill.TYPE_JOINED.equalsIgnoreCase(kill.getType()) && kill.getPlayer() != null)
-			.map(kill -> kill.getPlayer().toLowerCase(Locale.ENGLISH))
+		Set<String> playersWithJoin = events.stream()
+			.filter(event -> event != null && SplitEvent.TYPE_JOINED.equalsIgnoreCase(event.getType()) && event.getPlayer() != null)
+			.map(event -> event.getPlayer().toLowerCase(Locale.ENGLISH))
 			.collect(Collectors.toSet());
-		for (Kill kill : kills)
+		for (SplitEvent event : events)
 		{
-			if (kill == null || kill.getPlayer() == null)
+			if (event == null || event.getPlayer() == null)
 			{
 				continue;
 			}
-			String player = kill.getPlayer().toLowerCase(Locale.ENGLISH);
-			if (Kill.TYPE_JOINED.equalsIgnoreCase(kill.getType()))
+			String player = event.getPlayer().toLowerCase(Locale.ENGLISH);
+			if (SplitEvent.TYPE_JOINED.equalsIgnoreCase(event.getType()))
 			{
 				seenJoinByPlayer.put(player, true);
 			}
-			else if (Kill.TYPE_LEFT.equalsIgnoreCase(kill.getType())
+			else if (SplitEvent.TYPE_LEFT.equalsIgnoreCase(event.getType())
 				&& playersWithJoin.contains(player)
 				&& !seenJoinByPlayer.containsKey(player))
 			{
@@ -383,21 +383,21 @@ public class ManagerSession
 		return true;
 	}
 
-	private void removeKillFromSession(Kill kill)
+	private void removeEventFromSession(SplitEvent event)
 	{
 		for (Session s : sessions.values())
 		{
-			if (s.getKills().remove(kill))
+			if (s.getEvents().remove(event))
 			{
 				return;
 			}
 		}
 	}
 
-	private Kill copyKillForSession(Kill kill, String sessionId)
+	private SplitEvent copyEventForSession(SplitEvent event, String sessionId)
 	{
-		Kill copy = new Kill(sessionId, kill.getPlayer(), kill.getAmount(), kill.getAt());
-		copy.setType(kill.getType());
+		SplitEvent copy = new SplitEvent(sessionId, event.getPlayer(), event.getAmount(), event.getAt());
+		copy.setType(event.getType());
 		return copy;
 	}
 
@@ -439,8 +439,8 @@ public class ManagerSession
 			}
 		}
 
-		// Invalidate any cached mother->kills when loading fresh data
-		motherKillsCache.clear();
+		// Invalidate any cached mother->events when loading fresh data
+		motherEventsCache.clear();
 
 		currentSessionId = emptyToNull(data.getCurrentSessionId());
 		if (currentSessionId != null && !sessions.containsKey(currentSessionId))
@@ -630,7 +630,7 @@ public class ManagerSession
 			{
 				sessions.put(session.getId(), session);
 			}
-			motherKillsCache.clear();
+			motherEventsCache.clear();
 			saveToConfig();
 			return roots.size();
 		}
@@ -669,15 +669,15 @@ public class ManagerSession
 		{
 			copy.getPlayers().addAll(source.getPlayers());
 		}
-		if (source.getKills() != null)
+		if (source.getEvents() != null)
 		{
-			for (Kill kill : source.getKills())
+			for (SplitEvent event : source.getEvents())
 			{
-				if (kill == null)
+				if (event == null)
 				{
 					continue;
 				}
-				copy.getKills().add(copyKillForSession(kill, id));
+				copy.getEvents().add(copyEventForSession(event, id));
 			}
 		}
 		return copy;
@@ -853,7 +853,7 @@ public class ManagerSession
 					}
 				}
 			}
-			motherKillsCache.clear();
+			motherEventsCache.clear();
 		}
 		catch (Exception e)
 		{
@@ -915,7 +915,7 @@ public class ManagerSession
 		mother.setSettlementConfigAtStart(currentSettlementConfigSnapshot());
 		sessions.put(mother.getId(), mother);
 		// initialize empty cache list for this mother thread
-		motherKillsCache.put(mother.getId(), new ArrayList<>());
+		motherEventsCache.put(mother.getId(), new ArrayList<>());
 
 		Session child = new Session(newId(), Instant.now(), mother.getId());
 		sessions.put(child.getId(), child);
@@ -971,7 +971,7 @@ public class ManagerSession
 	}
 
 	/**
-	 * Add a player to the currently active child session. If the child already has kills recorded,
+	 * Add a player to the currently active child session. If the child already has events recorded,
 	 * a new child session is forked (same mother), roster is copied, the player is added, and the
 	 * previous child is ended to preserve historical rosters per split segment.
 	 * Alt names are resolved to main before checks. No-op in history mode.
@@ -1006,16 +1006,16 @@ public class ManagerSession
 		if (historyLoaded)
 		{
 			curr.getPlayers().add(fMain);
-			Kill joinEvent = new Kill(curr.getId(), fMain, 0L, Instant.now());
-			joinEvent.setType(Kill.TYPE_JOINED);
-			curr.getKills().add(joinEvent);
+			SplitEvent joinEvent = new SplitEvent(curr.getId(), fMain, 0L, Instant.now());
+			joinEvent.setType(SplitEvent.TYPE_JOINED);
+			curr.getEvents().add(joinEvent);
 			String motherId = curr.getMotherId() == null ? curr.getId() : curr.getMotherId();
-			motherKillsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(joinEvent);
+			motherEventsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(joinEvent);
 			saveAfterMutation();
 			return true;
 		}
 
-		if (curr.hasKills())
+		if (curr.hasEvents())
 		{
 			// Create a new child session, copy players, add this player, end current child
 			String motherId = curr.getMotherId() == null ? curr.getId() : curr.getMotherId();
@@ -1025,16 +1025,16 @@ public class ManagerSession
 			// add the new player (main)
 			newChild.getPlayers().add(fMain);
 
-			// End current child (but keep kills)
+			// End current child (but keep events)
 			curr.setEnd(Instant.now());
 
-			// Record a JOINED event kill in the new child
-			Kill joinEvent = new Kill(newChild.getId(), fMain, 0L, Instant.now());
-			joinEvent.setType(Kill.TYPE_JOINED);
-			newChild.getKills().add(joinEvent);
+			// Record a JOINED event in the new child
+			SplitEvent joinEvent = new SplitEvent(newChild.getId(), fMain, 0L, Instant.now());
+			joinEvent.setType(SplitEvent.TYPE_JOINED);
+			newChild.getEvents().add(joinEvent);
 
 			// Update mother cache incrementally
-			motherKillsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(joinEvent);
+			motherEventsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(joinEvent);
 
 			// Activate new child
 			sessions.put(newChild.getId(), newChild);
@@ -1043,21 +1043,21 @@ public class ManagerSession
 		else
 		{
 			curr.getPlayers().add(fMain);
-			// Record a JOINED event kill in the current child (no kills yet)
-			Kill joinEvent = new Kill(curr.getId(), fMain, 0L, Instant.now());
-			joinEvent.setType(Kill.TYPE_JOINED);
-			curr.getKills().add(joinEvent);
+			// Record a JOINED event in the current child (no events yet)
+			SplitEvent joinEvent = new SplitEvent(curr.getId(), fMain, 0L, Instant.now());
+			joinEvent.setType(SplitEvent.TYPE_JOINED);
+			curr.getEvents().add(joinEvent);
 
 			// Update mother cache incrementally
 			String motherId = curr.getMotherId() == null ? curr.getId() : curr.getMotherId();
-			motherKillsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(joinEvent);
+			motherEventsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(joinEvent);
 		}
 		saveAfterMutation();
 		return true;
 	}
 
 	/**
-	 * Remove a player from the active child session. If the current child already has kills,
+	 * Remove a player from the active child session. If the current child already has events,
 	 * a new child is created (same mother) without this player, and the current child is ended
 	 * to keep per-segment rosters intact. No-op in history mode.
 	 *
@@ -1095,16 +1095,16 @@ public class ManagerSession
 		{
 			String finalPlayer = player;
 			curr.getPlayers().removeIf(p -> p.equalsIgnoreCase(finalPlayer));
-			Kill leaveEvent = new Kill(curr.getId(), player, 0L, Instant.now());
-			leaveEvent.setType(Kill.TYPE_LEFT);
-			curr.getKills().add(leaveEvent);
+			SplitEvent leaveEvent = new SplitEvent(curr.getId(), player, 0L, Instant.now());
+			leaveEvent.setType(SplitEvent.TYPE_LEFT);
+			curr.getEvents().add(leaveEvent);
 			String motherId = curr.getMotherId() == null ? curr.getId() : curr.getMotherId();
-			motherKillsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(leaveEvent);
+			motherEventsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(leaveEvent);
 			saveAfterMutation();
 			return true;
 		}
 
-		if (curr.hasKills())
+		if (curr.hasEvents())
 		{
 			// Create a new child without this player, end current child
 			String motherId = curr.getMotherId() == null ? curr.getId() : curr.getMotherId();
@@ -1117,13 +1117,13 @@ public class ManagerSession
 			// End the current child
 			curr.setEnd(Instant.now());
 
-			// Record a LEFT event kill in the new child
-			Kill leaveEvent = new Kill(newChild.getId(), finalPlayer, 0L, Instant.now());
-			leaveEvent.setType(Kill.TYPE_LEFT);
-			newChild.getKills().add(leaveEvent);
+			// Record a LEFT event in the new child
+			SplitEvent leaveEvent = new SplitEvent(newChild.getId(), finalPlayer, 0L, Instant.now());
+			leaveEvent.setType(SplitEvent.TYPE_LEFT);
+			newChild.getEvents().add(leaveEvent);
 
 			// Update mother cache incrementally
-			motherKillsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(leaveEvent);
+			motherEventsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(leaveEvent);
 
 			sessions.put(newChild.getId(), newChild);
 			currentSessionId = newChild.getId();
@@ -1132,28 +1132,28 @@ public class ManagerSession
 		{
 			String finalPlayer = player;
 			curr.getPlayers().removeIf(p -> p.equalsIgnoreCase(finalPlayer));
-			// Record a LEFT event kill in the current child (no kills yet)
-			Kill leaveEvent = new Kill(curr.getId(), player, 0L, Instant.now());
-			leaveEvent.setType(Kill.TYPE_LEFT);
-			curr.getKills().add(leaveEvent);
+			// Record a LEFT event in the current child (no events yet)
+			SplitEvent leaveEvent = new SplitEvent(curr.getId(), player, 0L, Instant.now());
+			leaveEvent.setType(SplitEvent.TYPE_LEFT);
+			curr.getEvents().add(leaveEvent);
 
 			// Update mother cache incrementally
 			String motherId = curr.getMotherId() == null ? curr.getId() : curr.getMotherId();
-			motherKillsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(leaveEvent);
+			motherEventsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(leaveEvent);
 		}
 		saveAfterMutation();
 		return true;
 	}
 
 	/**
-	 * Record a kill value for a player in the active session. The player is resolved to its main
+	 * Record a loot value for a player in the active session. The player is resolved to its main
 	 * and must be on the active roster. No-op in history mode.
 	 *
 	 * @param player display name (main or alt)
 	 * @param amount value in coins (may be negative if allowed by config)
 	 * @return true if recorded
 	 */
-	public boolean addKill(String player, Long amount)
+	public boolean addLoot(String player, Long amount)
 	{
 		Session currentSession = getCurrentEditableSession().orElse(null);
 		if (currentSession == null || (!historyLoaded && !currentSession.isActive()))
@@ -1179,12 +1179,12 @@ public class ManagerSession
 			return false;
 		}
 
-		Kill newKill = new Kill(currentSession.getId(), mainPlayer, amount, Instant.now());
-		currentSession.getKills().add(newKill);
+		SplitEvent newLoot = new SplitEvent(currentSession.getId(), mainPlayer, amount, Instant.now());
+		currentSession.getEvents().add(newLoot);
 
 		// Update mother cache incrementally
 		String motherId = currentSession.getMotherId() == null ? currentSession.getId() : currentSession.getMotherId();
-		motherKillsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(newKill);
+		motherEventsCache.computeIfAbsent(motherId, k -> new ArrayList<>()).add(newLoot);
 
 		saveAfterMutation();
 		return true;
@@ -1201,7 +1201,7 @@ public class ManagerSession
 	/**
 	 * Queue a new pending value. The suggested player is normalized to its main. If configured,
 	 * the value may be auto-applied (when the player is currently in session), in which case this
-	 * method records a kill and does not queue. A small cap prevents unbounded growth.
+	 * method records a loot and does not queue. A small cap prevents unbounded growth.
 	 *
 	 * @param pendingValue pending value payload; null is ignored
 	 */
@@ -1229,7 +1229,7 @@ public class ManagerSession
 			Session currentSession = getCurrentSession().orElse(null);
 			if (currentSession != null && currentSession.getPlayers().stream().anyMatch(p -> p.equalsIgnoreCase(resolvedPlayer)))
 			{
-				addKill(resolvedPlayer, pendingValue.getValue());
+				addLoot(resolvedPlayer, pendingValue.getValue());
 				return; // do not queue
 			}
 		}
@@ -1255,7 +1255,7 @@ public class ManagerSession
 
 	/**
 	 * Apply a pending value to a specific player and remove it from the queue.
-	 * The player is resolved to its main; the underlying addKill() enforces roster rules.
+	 * The player is resolved to its main; the underlying addLoot() enforces roster rules.
 	 *
 	 * @param id     pending id
 	 * @param player target player (main or alt)
@@ -1269,7 +1269,7 @@ public class ManagerSession
 			return false;
 		}
 		String target = resolveMainName(player);
-		boolean ok = addKill(target, pv.getValue());
+		boolean ok = addLoot(target, pv.getValue());
 		if (ok)
 		{
 			pendingValues.remove(pv);
@@ -1336,7 +1336,7 @@ public class ManagerSession
 		if (historyLoaded)
 		{
 			historyDirty = true;
-			invalidateKillsCache();
+			invalidateEventsCache();
 			return;
 		}
 		saveToConfig();
@@ -1596,12 +1596,12 @@ public class ManagerSession
 
 
 	/**
-	 * Get all kills from all sessions that share the same mother session as the current session.
+	 * Get all events from all sessions that share the same mother session as the current session.
 	 * Uses a cached list per mother to avoid recomputing on every UI update.
 	 *
-	 * @return a list containing all kill records from sessions with the same mother
+	 * @return a list containing all event records from sessions with the same mother
 	 */
-	public List<Kill> getAllKills()
+	public List<SplitEvent> getAllEvents()
 	{
 		Session curr = getCurrentSession().orElse(null);
 		if (curr == null)
@@ -1611,22 +1611,22 @@ public class ManagerSession
 		// Determine the mother id for this thread
 		String motherId = (curr.getMotherId() == null) ? curr.getId() : curr.getMotherId();
 		// If cached, return it
-		List<Kill> cached = motherKillsCache.get(motherId);
+		List<SplitEvent> cached = motherEventsCache.get(motherId);
 		if (cached != null)
 		{
 			return Collections.unmodifiableList(cached);
 		}
 		// Build once in persisted session/list order. The edit-history UI can reorder
-		// kills, so sorting by timestamp here would discard those edits on refresh.
-		List<Kill> built = new ArrayList<>();
+		// events, so sorting by timestamp here would discard those edits on refresh.
+		List<SplitEvent> built = new ArrayList<>();
 		for (Session session : sessions.values())
 		{
 			if (motherId.equals(session.getId()) || motherId.equals(session.getMotherId()))
 			{
-				built.addAll(session.getKills());
+				built.addAll(session.getEvents());
 			}
 		}
-		motherKillsCache.put(motherId, built);
+		motherEventsCache.put(motherId, built);
 		return built;
 	}
 
