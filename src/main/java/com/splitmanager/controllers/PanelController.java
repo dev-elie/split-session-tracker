@@ -881,7 +881,9 @@ public class PanelController implements PanelActions
 		boolean historyMode = sessionManager.isHistoryLoaded();
 		boolean hasActiveSession = sessionManager.hasActiveSession();
 		boolean hasLoadedHistory = historyMode && sessionManager.getCurrentEditableSession().isPresent();
-		boolean canMutateSession = hasActiveSession || hasLoadedHistory;
+		boolean historyEditLocked = historyMode && sessionManager.isCurrentHistoryEditLocked();
+		boolean canEditLoadedHistory = hasLoadedHistory && !historyEditLocked;
+		boolean canMutateSession = hasActiveSession || canEditLoadedHistory;
 
 		view.getBtnStart().setEnabled(historyMode || !hasActiveSession);
 		view.getBtnStop().setEnabled(historyMode || hasActiveSession);
@@ -905,7 +907,7 @@ public class PanelController implements PanelActions
 		view.getBtnUnloadHistory().setEnabled(historyMode);
 		view.getBtnExportHistory().setEnabled(hasHistory);
 		view.getBtnImportHistory().setEnabled(true);
-		view.getRecentSplitsTable().setEnabled(true);
+		view.getRecentSplitsTable().setEnabled(!historyEditLocked);
 	}
 
 	/**

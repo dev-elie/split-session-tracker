@@ -40,6 +40,8 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ManagerSession
 {
+	private static final String MIN_HISTORY_EDIT_VERSION = Session.CURRENT_PLUGIN_VERSION;
+
 	private final Gson gson;
 	private final Map<String, Session> sessions = new LinkedHashMap<>();
 	private final List<PendingValue> pendingValues = new ArrayList<>();
@@ -663,6 +665,7 @@ public class ManagerSession
 	{
 		Session copy = new Session(id, source.getStart(), motherId);
 		copy.setEnd(source.getEnd());
+		copy.setPluginVersion(source.getPluginVersion());
 		copy.setSettlementConfigAtStart(source.getSettlementConfigAtStart());
 		copy.setSettlementConfigAtEnd(source.getSettlementConfigAtEnd());
 		if (source.getPlayers() != null)
@@ -1318,6 +1321,10 @@ public class ManagerSession
 		{
 			return true;
 		}
+		if (isCurrentHistoryEditLocked())
+		{
+			return false;
+		}
 		if (!historyEditWarningAccepted)
 		{
 			boolean accepted = historyEditWarningHandler == null || historyEditWarningHandler.getAsBoolean();
@@ -1329,6 +1336,68 @@ public class ManagerSession
 		}
 		historyDirty = true;
 		return true;
+	}
+
+	public boolean isCurrentHistoryEditLocked()
+	{
+		if (!historyLoaded)
+		{
+			return false;
+		}
+		Session current = getCurrentSession().orElse(null);
+		return isHistoryEditLocked(current);
+	}
+
+	private boolean isHistoryEditLocked(Session session)
+	{
+		if (session == null)
+		{
+			return true;
+		}
+		for (Session threadSession : getThreadSessions(session))
+		{
+			if (isVersionBefore(threadSession.getPluginVersion(), MIN_HISTORY_EDIT_VERSION))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static boolean isVersionBefore(String version, String minimumVersion)
+	{
+		if (version == null || version.trim().isEmpty())
+		{
+			return true;
+		}
+		int[] parsedVersion = parseVersion(version);
+		int[] parsedMinimum = parseVersion(minimumVersion);
+		for (int i = 0; i < parsedMinimum.length; i++)
+		{
+			if (parsedVersion[i] != parsedMinimum[i])
+			{
+				return parsedVersion[i] < parsedMinimum[i];
+			}
+		}
+		return false;
+	}
+
+	private static int[] parseVersion(String version)
+	{
+		int[] parts = new int[]{0, 0, 0};
+		String[] tokens = version.split("\\.");
+		for (int i = 0; i < parts.length && i < tokens.length; i++)
+		{
+			try
+			{
+				parts[i] = Integer.parseInt(tokens[i].replaceAll("[^0-9].*$", ""));
+			}
+			catch (NumberFormatException e)
+			{
+				parts[i] = 0;
+			}
+		}
+		return parts;
 	}
 
 	public void markHistoryMutation()

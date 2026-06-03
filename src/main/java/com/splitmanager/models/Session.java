@@ -45,6 +45,8 @@ import lombok.Setter;
 @Getter
 public class Session
 {
+	public static final String CURRENT_PLUGIN_VERSION = "3.1.0";
+
 	/**
 	 * Unique identifier for this segment (UUID string). Used as the key in persistence and lookup.
 	 */
@@ -68,6 +70,11 @@ public class Session
 	 */
 	@SerializedName(value = "events", alternate = {"kills"})
 	private final List<SplitEvent> events = new ArrayList<>();
+	/**
+	 * Plugin version that created this segment layout. Missing on legacy data from versions before tracking.
+	 */
+	@Setter
+	private String pluginVersion;
 	/**
 	 * When non-null, marks the time this segment was closed. Null implies the segment is active.
 	 */
@@ -96,6 +103,7 @@ public class Session
 		this.id = id;
 		this.start = start;
 		this.motherId = motherId;
+		this.pluginVersion = CURRENT_PLUGIN_VERSION;
 	}
 
 	/**

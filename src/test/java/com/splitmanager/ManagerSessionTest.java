@@ -509,6 +509,70 @@ public class ManagerSessionTest
 	}
 
 	@Test
+	public void testLegacyVersionHistoryIsReadOnly()
+	{
+		when(config.accountForGeTax()).thenReturn(true);
+		when(config.geTaxMinimumValue()).thenReturn("15m");
+		when(config.geTaxPercent()).thenReturn(2.0d);
+		when(config.geTaxMaxPerLoot()).thenReturn("5m");
+		resolveToSelf("Player1", "Player2");
+
+		managerSession.startSession();
+		managerSession.addPlayerToActive("Player1");
+		managerSession.addLoot("Player1", 100000L);
+		managerSession.stopSession();
+
+		for (Session session : managerSession.getAllSessionsNewestFirst())
+		{
+			session.setPluginVersion("3.0.1");
+		}
+
+		Session historyRoot = managerSession.getHistorySessionsNewestFirst().get(0);
+		assertTrue(managerSession.loadHistory(historyRoot.getId()).isPresent());
+		assertTrue(managerSession.isCurrentHistoryEditLocked());
+		managerSession.setHistoryEditWarningHandler(() -> true);
+
+		assertFalse(managerSession.addPlayerToActive("Player2"));
+		assertFalse(managerSession.updateSettlementConfigSnapshotFor(
+			historyRoot,
+			new com.splitmanager.models.SettlementConfigSnapshot(true, "15m", 10.0d, "10m")));
+		assertFalse(managerSession.isHistoryDirty());
+	}
+
+	@Test
+	public void testNewSessionHistoryCarriesEditableVersion()
+	{
+		resolveToSelf("Player1");
+
+		managerSession.startSession();
+		managerSession.addPlayerToActive("Player1");
+		managerSession.addLoot("Player1", 100000L);
+		managerSession.stopSession();
+
+		Session historyRoot = managerSession.getHistorySessionsNewestFirst().get(0);
+		assertEquals(Session.CURRENT_PLUGIN_VERSION, historyRoot.getPluginVersion());
+		assertTrue(managerSession.loadHistory(historyRoot.getId()).isPresent());
+		assertFalse(managerSession.isCurrentHistoryEditLocked());
+	}
+
+	@Test
+	public void testImportedHistoryWithoutVersionIsReadOnly()
+	{
+		String json = "["
+			+ "{\"id\":\"root\",\"start\":\"1970-01-01T00:00:00Z\",\"end\":\"1970-01-01T00:00:10Z\",\"players\":[],\"events\":[]},"
+			+ "{\"id\":\"child\",\"start\":\"1970-01-01T00:00:01Z\",\"end\":\"1970-01-01T00:00:10Z\",\"motherId\":\"root\","
+			+ "\"players\":[\"Player1\"],\"events\":[{\"sessionId\":\"child\",\"at\":\"1970-01-01T00:00:02Z\","
+			+ "\"player\":\"Player1\",\"amount\":100000}]}"
+			+ "]";
+
+		assertEquals(1, managerSession.importHistorySessionsJson(json));
+		Session historyRoot = managerSession.getHistorySessionsNewestFirst().get(0);
+
+		assertTrue(managerSession.loadHistory(historyRoot.getId()).isPresent());
+		assertTrue(managerSession.isCurrentHistoryEditLocked());
+	}
+
+	@Test
 	public void testDiscardHistoryChangesRestoresStagedHistoryEdit()
 	{
 		when(config.accountForGeTax()).thenReturn(true);

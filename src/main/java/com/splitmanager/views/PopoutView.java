@@ -197,18 +197,31 @@ public class PopoutView extends PanelView
 		JLabel title = new JLabel("Edit Session History");
 		title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 2.0f));
 		header.add(title, BorderLayout.WEST);
+		if (getSessionManager().isCurrentHistoryEditLocked())
+		{
+			JLabel locked = new JLabel("Read-only legacy history");
+			locked.setForeground(ColorScheme.BRAND_ORANGE);
+			header.add(locked, BorderLayout.EAST);
+		}
 
 		HistoryTableModel model = new HistoryTableModel();
 		JTable table = new JTable(model);
 		table.setRowHeight(24);
 		table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
-		table.setDragEnabled(true);
-		table.setDropMode(javax.swing.DropMode.INSERT_ROWS);
-		table.setTransferHandler(new HistoryTransferHandler(model));
+		boolean editable = !getSessionManager().isCurrentHistoryEditLocked();
+		table.setDragEnabled(editable);
+		if (editable)
+		{
+			table.setDropMode(javax.swing.DropMode.INSERT_ROWS);
+			table.setTransferHandler(new HistoryTransferHandler(model));
+		}
 		table.getColumnModel().getColumn(HistoryTableModel.DELETE_COLUMN).setMinWidth(34);
 		table.getColumnModel().getColumn(HistoryTableModel.DELETE_COLUMN).setMaxWidth(42);
 		table.getColumnModel().getColumn(HistoryTableModel.DELETE_COLUMN).setCellRenderer(new DeleteButtonRenderer(model));
-		table.getColumnModel().getColumn(HistoryTableModel.DELETE_COLUMN).setCellEditor(new DeleteButtonEditor(model));
+		if (editable)
+		{
+			table.getColumnModel().getColumn(HistoryTableModel.DELETE_COLUMN).setCellEditor(new DeleteButtonEditor(model));
+		}
 
 		panel.add(header, BorderLayout.NORTH);
 		panel.add(new JScrollPane(table), BorderLayout.CENTER);
@@ -558,6 +571,10 @@ public class PopoutView extends PanelView
 		@Override
 		public boolean isCellEditable(int rowIndex, int columnIndex)
 		{
+			if (sessionManager.isCurrentHistoryEditLocked())
+			{
+				return false;
+			}
 			return columnIndex == 1 || columnIndex == 2 || columnIndex == DELETE_COLUMN;
 		}
 
