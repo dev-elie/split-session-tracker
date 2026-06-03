@@ -60,6 +60,25 @@ public class SplitCalculatorTest
 	}
 
 	@Test
+	public void attributesLootToRosterPlayerIgnoringCase()
+	{
+		Session mother = new Session("mother", Instant.EPOCH, null);
+		Session current = new Session("current", Instant.EPOCH.plusSeconds(1), "mother");
+		current.getPlayers().addAll(Arrays.asList("Alice", "Bob"));
+		current.getEvents().add(new SplitEvent("current", "alice", 100000L, Instant.EPOCH.plusSeconds(2)));
+
+		List<PlayerMetrics> metrics = new SplitCalculator().compute(
+			current,
+			Arrays.asList(mother, current),
+			new LinkedHashSet<>(current.getPlayers()),
+			true);
+
+		assertEquals(100000L, find(metrics, "Alice").total);
+		assertEquals(-50000L, find(metrics, "Alice").split);
+		assertEquals(50000L, find(metrics, "Bob").split);
+	}
+
+	@Test
 	public void appliesGeTaxToSplitValue()
 	{
 		Session mother = new Session("mother", Instant.EPOCH, null);

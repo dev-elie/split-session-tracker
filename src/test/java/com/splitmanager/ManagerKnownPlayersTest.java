@@ -193,6 +193,18 @@ public class ManagerKnownPlayersTest
 	}
 
 	@Test
+	public void testLoadFromConfigDeduplicatesKnownPlayersIgnoringCase()
+	{
+		when(config.knownPlayersCsv()).thenReturn("Player1, player1 ,PLAYER1,Player2");
+
+		playerManager.loadFromConfig();
+
+		assertEquals(2, playerManager.getKnownPlayers().size());
+		assertTrue(playerManager.getKnownPlayers().contains("Player1"));
+		assertTrue(playerManager.getKnownPlayers().contains("Player2"));
+	}
+
+	@Test
 	public void testParseAltFromEntry()
 	{
 		assertEquals("AltName", playerManager.parseAltFromEntry("AltName is an alt of MainName"));

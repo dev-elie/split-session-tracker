@@ -81,6 +81,20 @@ public class FormatsTest
 	}
 
 	@Test
+	public void testStringToValueRejectsOverflowAsParseException()
+	{
+		try
+		{
+			formatter.stringToValue("999999999999999999999999999999999999b");
+			fail("Overflowing amount should fail as invalid input");
+		}
+		catch (ParseException expected)
+		{
+			assertTrue(true);
+		}
+	}
+
+	@Test
 	public void testStringAmountToLongAmountUsesProvidedOrStaticConfig() throws ParseException
 	{
 		when(config.defaultValueMultiplier()).thenReturn(PluginConfig.ValueMultiplier.BILLION);

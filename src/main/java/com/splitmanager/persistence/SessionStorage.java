@@ -83,6 +83,20 @@ public class SessionStorage
 		return value == null || value.isEmpty() ? null : value;
 	}
 
+	private static String sanitizeFileNamePart(String value)
+	{
+		if (value == null || value.trim().isEmpty())
+		{
+			return "profile";
+		}
+		String sanitized = value.trim().replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]+", "_");
+		while (sanitized.contains(".."))
+		{
+			sanitized = sanitized.replace("..", "_");
+		}
+		return sanitized.isEmpty() ? "profile" : sanitized;
+	}
+
 	public boolean isLegacyConfigStore()
 	{
 		return legacyConfig != null;
@@ -217,7 +231,7 @@ public class SessionStorage
 		}
 		ConfigProfile profile = configManager.getProfile();
 		File pluginDir = new File(RuneLite.RUNELITE_DIR, PLUGIN_DIR);
-		return new File(pluginDir, profile.getName() + "-" + profile.getId() + FILE_SUFFIX);
+		return new File(pluginDir, sanitizeFileNamePart(profile.getName()) + "-" + profile.getId() + FILE_SUFFIX);
 	}
 
 	public boolean hasLegacyData(PluginConfig config)

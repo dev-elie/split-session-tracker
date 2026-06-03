@@ -250,7 +250,16 @@ public class Formats
 			// Convert to raw coins
 			BigDecimal coinsValue = getBigDecimal(number, suffix);
 			// Return the exact long value (no normalization to K units)
-			return coinsValue.setScale(0, RoundingMode.FLOOR).longValueExact();
+			try
+			{
+				return coinsValue.setScale(0, RoundingMode.FLOOR).longValueExact();
+			}
+			catch (ArithmeticException e)
+			{
+				ParseException parseException = new ParseException("Amount is too large", 0);
+				parseException.initCause(e);
+				throw parseException;
+			}
 		}
 
 		@Override

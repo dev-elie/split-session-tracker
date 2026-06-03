@@ -48,7 +48,7 @@ public class ManagerKnownPlayers
 				String t = p.trim();
 				if (!t.isEmpty())
 				{
-					knownPlayers.add(t);
+					addKnownPlayerFromConfig(t);
 				}
 			}
 		}
@@ -325,6 +325,14 @@ public class ManagerKnownPlayers
 			saveToConfig();
 		}
 		return added;
+	}
+
+	private void addKnownPlayerFromConfig(String name)
+	{
+		if (knownPlayers.stream().noneMatch(p -> p.equalsIgnoreCase(name)))
+		{
+			knownPlayers.add(name);
+		}
 	}
 
 	public boolean isKnownPlayer(String name)

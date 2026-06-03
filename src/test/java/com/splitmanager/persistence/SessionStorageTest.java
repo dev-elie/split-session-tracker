@@ -5,6 +5,7 @@ import com.splitmanager.models.SplitEvent;
 import com.splitmanager.models.Session;
 import com.splitmanager.utils.InstantTypeAdapter;
 import java.io.File;
+import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Instant;
@@ -16,6 +17,11 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import net.runelite.client.RuneLite;
+import net.runelite.client.config.ConfigManager;
+import net.runelite.client.config.ConfigProfile;
 
 public class SessionStorageTest
 {
@@ -122,5 +128,22 @@ public class SessionStorageTest
 
 		assertTrue(storage.save(new SessionStorageData()));
 		assertTrue(file.exists());
+	}
+
+	@Test
+	public void profileBackedStorageSanitizesProfileNameForFilePath()
+	{
+		ConfigManager configManager = mock(ConfigManager.class);
+		ConfigProfile profile = mock(ConfigProfile.class);
+		when(configManager.getProfile()).thenReturn(profile);
+		when(profile.getName()).thenReturn("../escaped/profile");
+		when(profile.getId()).thenReturn(123L);
+
+		SessionStorage storage = new SessionStorage(configManager, gson);
+
+		Path pluginDir = new File(RuneLite.RUNELITE_DIR, "auto-split-manager").toPath().toAbsolutePath().normalize();
+		Path storagePath = new File(storage.describeLocation()).toPath().toAbsolutePath().normalize();
+		assertTrue(storagePath.startsWith(pluginDir));
+		assertFalse(storagePath.toString().contains(".."));
 	}
 }

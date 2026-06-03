@@ -110,7 +110,11 @@ public class SplitCalculator
 			}
 			long lootAmount = event.getAmount();
 			long splitAmount = computeSplitAmount(lootAmount, geTaxSettings);
-			perSessionTotals.computeIfPresent(event.getPlayer(), (player, value) -> value + splitAmount);
+			String rosterPlayer = findRosterPlayer(roster, event.getPlayer());
+			if (rosterPlayer != null)
+			{
+				perSessionTotals.computeIfPresent(rosterPlayer, (player, value) -> value + splitAmount);
+			}
 		}
 
 		long sessionAverage = sum(perSessionTotals) / perSessionTotals.size();
@@ -145,6 +149,22 @@ public class SplitCalculator
 		}
 
 		return Math.max(lootAmount - geTax, 0L);
+	}
+
+	private String findRosterPlayer(List<String> roster, String player)
+	{
+		if (player == null)
+		{
+			return null;
+		}
+		for (String rosterPlayer : roster)
+		{
+			if (rosterPlayer != null && rosterPlayer.equalsIgnoreCase(player))
+			{
+				return rosterPlayer;
+			}
+		}
+		return null;
 	}
 
 	private long computeGeTax(long lootAmount, GeTaxSettings geTaxSettings)
