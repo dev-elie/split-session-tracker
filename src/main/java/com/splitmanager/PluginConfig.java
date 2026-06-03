@@ -12,6 +12,7 @@ import net.runelite.client.config.ConfigSection;
  * It provides persistent storage of various user and system-defined settings. Additionally, this interface
  * manages settings related to settlement, chat detection, and session handling.
  */
+@SuppressWarnings("SameReturnValue")
 @ConfigGroup(PluginConfig.GROUP)
 public interface PluginConfig extends Config
 {
