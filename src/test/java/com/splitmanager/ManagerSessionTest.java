@@ -100,6 +100,23 @@ public class ManagerSessionTest
 		return -1;
 	}
 
+	private int findLootEventIndex(String player, long amount)
+	{
+		List<SplitEvent> events = managerSession.getAllEvents();
+		for (int i = 0; i < events.size(); i++)
+		{
+			SplitEvent event = events.get(i);
+			if (event.isLootEvent()
+				&& player.equalsIgnoreCase(event.getPlayer())
+				&& event.getAmount() != null
+				&& event.getAmount() == amount)
+			{
+				return i;
+			}
+		}
+		return -1;
+	}
+
 	@Test
 	public void testStartSession()
 	{
@@ -1121,6 +1138,44 @@ public class ManagerSessionTest
 	}
 
 	@Test
+	public void testMoveLootEventInHistoryModeRecalculatesMetricsForTargetSegment()
+	{
+		managerSession.startSession();
+		String p1 = "Player1";
+		String p2 = "Player2";
+		String p3 = "Player3";
+		resolveToSelf(p1, p2, p3);
+
+		managerSession.addPlayerToActive(p1);
+		managerSession.addPlayerToActive(p2);
+		managerSession.addLoot(p1, 100000L);
+		managerSession.addPlayerToActive(p3);
+		managerSession.addLoot(p2, 300000L);
+		managerSession.stopSession();
+
+		Session historyRoot = managerSession.getHistorySessionsNewestFirst().get(0);
+		assertTrue(managerSession.loadHistory(historyRoot.getId()).isPresent());
+		Session editable = requireSession(managerSession.getCurrentEditableSession());
+
+		List<PlayerMetrics> before = managerSession.computeMetricsFor(editable, true);
+		assertEquals(50000L, requireMetric(before, p1).split);
+		assertEquals(-150000L, requireMetric(before, p2).split);
+		assertEquals(100000L, requireMetric(before, p3).split);
+
+		int lootIndex = findLootEventIndex(p1, 100000L);
+		assertTrue(lootIndex >= 0);
+		assertTrue(managerSession.moveEvent(lootIndex, managerSession.getAllEvents().size()));
+
+		List<PlayerMetrics> after = managerSession.computeMetricsFor(editable, true);
+		assertEquals(100000L, requireMetric(after, p1).total);
+		assertEquals(33333L, requireMetric(after, p1).split);
+		assertEquals(300000L, requireMetric(after, p2).total);
+		assertEquals(-166667L, requireMetric(after, p2).split);
+		assertEquals(0L, requireMetric(after, p3).total);
+		assertEquals(133333L, requireMetric(after, p3).split);
+	}
+
+	@Test
 	public void testMoveEventRejectsLeftBeforeJoined()
 	{
 		managerSession.startSession();
@@ -1157,6 +1212,45 @@ public class ManagerSessionTest
 		assertEquals(p2, after.get(joinedIndex).getPlayer());
 		assertEquals(SplitEvent.TYPE_LEFT, after.get(leftIndex).getType());
 		assertEquals(p2, after.get(leftIndex).getPlayer());
+	}
+
+	@Test
+	public void testInvalidRosterEventMoveInHistoryModePreservesMetrics()
+	{
+		managerSession.startSession();
+		String p1 = "Player1";
+		String p2 = "Player2";
+		resolveToSelf(p1, p2);
+
+		managerSession.addPlayerToActive(p1);
+		managerSession.addPlayerToActive(p2);
+		managerSession.addLoot(p1, 100000L);
+		assertTrue(managerSession.removePlayerFromSession(p2));
+		managerSession.stopSession();
+
+		Session historyRoot = managerSession.getHistorySessionsNewestFirst().get(0);
+		assertTrue(managerSession.loadHistory(historyRoot.getId()).isPresent());
+		Session editable = requireSession(managerSession.getCurrentEditableSession());
+		List<PlayerMetrics> beforeMetrics = managerSession.computeMetricsFor(editable, true);
+
+		int joinedIndex = findEventIndex(SplitEvent.TYPE_JOINED, p2);
+		int leftIndex = findEventIndex(SplitEvent.TYPE_LEFT, p2);
+		assertTrue(joinedIndex >= 0);
+		assertTrue(leftIndex > joinedIndex);
+
+		assertFalse(managerSession.moveEvent(leftIndex, joinedIndex));
+
+		List<SplitEvent> afterEvents = managerSession.getAllEvents();
+		assertEquals(SplitEvent.TYPE_JOINED, afterEvents.get(joinedIndex).getType());
+		assertEquals(p2, afterEvents.get(joinedIndex).getPlayer());
+		assertEquals(SplitEvent.TYPE_LEFT, afterEvents.get(leftIndex).getType());
+		assertEquals(p2, afterEvents.get(leftIndex).getPlayer());
+
+		List<PlayerMetrics> afterMetrics = managerSession.computeMetricsFor(editable, true);
+		assertEquals(requireMetric(beforeMetrics, p1).total, requireMetric(afterMetrics, p1).total);
+		assertEquals(requireMetric(beforeMetrics, p1).split, requireMetric(afterMetrics, p1).split);
+		assertEquals(requireMetric(beforeMetrics, p2).total, requireMetric(afterMetrics, p2).total);
+		assertEquals(requireMetric(beforeMetrics, p2).split, requireMetric(afterMetrics, p2).split);
 	}
 
 	@Test
