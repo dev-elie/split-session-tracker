@@ -16,7 +16,6 @@ import net.runelite.client.ui.ColorScheme;
 
 public class SessionGraphPanel extends JPanel
 {
-	private static final long serialVersionUID = 1L;
 
 	private static final Color LINE_COLOR = new Color(92, 180, 255);
 	private static final Color BAR_COLOR = new Color(222, 168, 64);

@@ -82,7 +82,6 @@ import net.runelite.client.util.SwingUtil;
 @Getter
 public class PanelView extends PluginPanel
 {
-	private static final long serialVersionUID = 1L;
 
 	private static final int HEADER_ICON_SIZE = 16;
 	private static final int EDIT_HEADER_ICON_SIZE = 14;
@@ -396,7 +395,6 @@ public class PanelView extends PluginPanel
 			.put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "submit-form");
 		component.getActionMap().put("submit-form", new AbstractAction()
 		{
-			private static final long serialVersionUID = 1L;
 
 			@Override
 			public void actionPerformed(java.awt.event.ActionEvent e)
@@ -1300,7 +1298,6 @@ public class PanelView extends PluginPanel
 
 		DefaultTableCellRenderer greyingRenderer = new DefaultTableCellRenderer()
 		{
-			private static final long serialVersionUID = 1L;
 
 			@Override
 			public java.awt.Component getTableCellRendererComponent(JTable table, Object value,
@@ -1330,7 +1327,6 @@ public class PanelView extends PluginPanel
 
 		DefaultTableCellRenderer splitRenderer = new DefaultTableCellRenderer()
 		{
-			private static final long serialVersionUID = 1L;
 
 			@Override
 			public java.awt.Component getTableCellRendererComponent(JTable table, Object value,
@@ -1395,7 +1391,6 @@ public class PanelView extends PluginPanel
 			javax.swing.table.DefaultTableModel txModel =
 				new javax.swing.table.DefaultTableModel(new Object[]{"Suggested direct payments"}, 0)
 				{
-					private static final long serialVersionUID = 1L;
 
 					@Override
 					public boolean isCellEditable(int r, int c)

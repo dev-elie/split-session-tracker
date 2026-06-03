@@ -13,7 +13,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public final class RecentSplitsTable extends javax.swing.table.AbstractTableModel
 {
-	private static final long serialVersionUID = 1L;
 
 	private static final String[] COLS = {"Time", "Player", "Amount", "Tax"};
 	private static final java.time.ZoneId SYS_TZ = java.time.ZoneId.systemDefault();

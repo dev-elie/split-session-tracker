@@ -33,7 +33,6 @@ import net.runelite.client.util.SwingUtil;
  */
 public class DropdownRip extends JPanel
 {
-	private static final long serialVersionUID = 1L;
 	private static final Dimension HEADER_CONTROL_SIZE = new Dimension(24, 24);
 
 	private final Header header;
@@ -94,7 +93,6 @@ public class DropdownRip extends JPanel
 
 	private final class Header extends JPanel
 	{
-		private static final long serialVersionUID = 1L;
 		private final ImageIcon SECTION_EXPAND_ICON;
 		private final ImageIcon SECTION_RETRACT_ICON;
 

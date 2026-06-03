@@ -12,7 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class WaitlistTable extends AbstractTableModel
 {
-	private static final long serialVersionUID = 1L;
 
 	private final String[] cols = {"Type", "Value", "Player"};
 	private final List<PendingValue> rows = new ArrayList<>();

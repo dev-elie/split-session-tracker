@@ -8,7 +8,6 @@ import net.runelite.client.ui.ColorScheme;
 
 public class RemoveButtonRenderer extends JButton implements TableCellRenderer
 {
-	private static final long serialVersionUID = 1L;
 
 	public RemoveButtonRenderer()
 	{

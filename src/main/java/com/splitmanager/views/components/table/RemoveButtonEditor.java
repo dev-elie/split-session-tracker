@@ -20,7 +20,6 @@ import net.runelite.client.ui.ColorScheme;
  */
 public class RemoveButtonEditor extends DefaultCellEditor
 {
-	private static final long serialVersionUID = 1L;
 	private static final FlatSVGIcon REMOVE_ICON = new FlatSVGIcon(
 		RemoveButtonEditor.class.getResource("/com/splitmanager/icons/sleep.svg")).derive(16, 16);
 	private static final FlatSVGIcon ADD_ICON = new FlatSVGIcon(

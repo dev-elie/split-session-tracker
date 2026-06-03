@@ -57,7 +57,6 @@ import net.runelite.client.util.SwingUtil;
 @Slf4j
 public class PopoutView extends PanelView
 {
-	private static final long serialVersionUID = 1L;
 
 	private static final int GRAPH_REFRESH_INTERVAL_MS = 60_000;
 	private static final Dimension LEFT_PANE_PREFERRED_SIZE = new Dimension(330, 600);
@@ -374,7 +373,6 @@ public class PopoutView extends PanelView
 
 	private static class ScrollableSidebarPanel extends JPanel implements Scrollable
 	{
-		private static final long serialVersionUID = 1L;
 
 		@Override
 		public Dimension getPreferredScrollableViewportSize()
@@ -409,7 +407,6 @@ public class PopoutView extends PanelView
 
 	private class HistoryTableModel extends AbstractTableModel
 	{
-		private static final long serialVersionUID = 1L;
 
 		private static final int DELETE_COLUMN = 4;
 		private final String[] columns = {"Time", "Player", "Amount", "Type", "X"};
@@ -616,7 +613,6 @@ public class PopoutView extends PanelView
 
 	private class DeleteButtonEditor extends AbstractCellEditor implements TableCellEditor
 	{
-		private static final long serialVersionUID = 1L;
 
 		private final JButton button = createDeleteButton();
 		private final HistoryTableModel model;
@@ -716,7 +712,6 @@ public class PopoutView extends PanelView
 
 	private class HistoryTransferHandler extends TransferHandler
 	{
-		private static final long serialVersionUID = 1L;
 
 		private final HistoryTableModel model;
 
