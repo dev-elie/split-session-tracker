@@ -30,7 +30,7 @@ dependencies {
 }
 
 group = 'com.splitmanager'
-version = '3.1.0'
+version = '3.1.0' // Also tracked in Session.java CURRENT_PLUGIN_VERSION
 
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'
