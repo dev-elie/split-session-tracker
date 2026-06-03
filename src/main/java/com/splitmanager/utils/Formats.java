@@ -261,7 +261,10 @@ public class Formats
 				return "";
 			}
 			long coins = ((Number) value).longValue();
-			return toSuffixString(coins, 'k');
+			String suffix = config == null || config.defaultValueMultiplier() == null
+				? "k"
+				: config.defaultValueMultiplier().getValue();
+			return toSuffixString(coins, suffix);
 		}
 
 	}

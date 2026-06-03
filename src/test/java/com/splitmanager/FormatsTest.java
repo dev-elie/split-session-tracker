@@ -122,6 +122,23 @@ public class FormatsTest
 	}
 
 	@Test
+	public void testValueToStringUsesConfiguredDefaultSuffix()
+		throws ParseException
+	{
+		when(config.defaultValueMultiplier()).thenReturn(PluginConfig.ValueMultiplier.MILLION);
+		Object committedMillions = formatter.stringToValue("12");
+
+		assertEquals(12000000L, committedMillions);
+		assertEquals("12M", formatter.valueToString(committedMillions));
+
+		when(config.defaultValueMultiplier()).thenReturn(PluginConfig.ValueMultiplier.BILLION);
+		Object committedBillions = formatter.stringToValue("2");
+
+		assertEquals(2000000000L, committedBillions);
+		assertEquals("2B", formatter.valueToString(committedBillions));
+	}
+
+	@Test
 	public void testFormatUpdates()
 	{
 		when(config.timeFormat()).thenReturn("[HH:mm]");
