@@ -29,6 +29,7 @@ import java.util.stream.Collectors;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -49,8 +50,10 @@ public class ManagerSession
 	private final SplitCalculator splitCalculator;
 	// Cache of all kills grouped by mother session id to avoid recomputing on every UI refresh
 	private final Map<String, List<Kill>> motherKillsCache = new LinkedHashMap<>();
+	@Setter
 	private BooleanSupplier historyEditWarningHandler;
 	private boolean historyEditWarningAccepted;
+	@Getter
 	private boolean historyDirty;
 	private String historyOriginalSessionsJson;
 	private String currentSessionId;
@@ -251,7 +254,7 @@ public class ManagerSession
 		return false;
 	}
 
-	private boolean hasIgnoredRosterEventForPlayer(Session session, String player, List<Kill> ignoredEvents, String type)
+	private boolean hasIgnoredRosterEventForPlayer(Session session, String player, List<Kill> ignoredEvents, @SuppressWarnings("SameParameterValue") String type)
 	{
 		for (Kill kill : session.getKills())
 		{
@@ -298,7 +301,7 @@ public class ManagerSession
 		{
 			insertionIndex--;
 		}
-		insertionIndex = Math.max(0, Math.min(insertionIndex, remainingKills.size()));
+		insertionIndex = Math.min(insertionIndex, remainingKills.size());
 		List<Kill> reorderedKills = new ArrayList<>(remainingKills);
 		reorderedKills.add(insertionIndex, kill);
 		if (!hasValidRosterEventOrder(reorderedKills))
@@ -829,11 +832,6 @@ public class ManagerSession
 		return true;
 	}
 
-	public boolean isHistoryDirty()
-	{
-		return historyDirty;
-	}
-
 	private void restoreOriginalHistorySessions()
 	{
 		if (historyOriginalSessionsJson == null || historyOriginalSessionsJson.trim().isEmpty())
@@ -1312,11 +1310,6 @@ public class ManagerSession
 	public void init()
 	{
 		loadFromConfig();
-	}
-
-	public void setHistoryEditWarningHandler(BooleanSupplier historyEditWarningHandler)
-	{
-		this.historyEditWarningHandler = historyEditWarningHandler;
 	}
 
 	public boolean prepareHistoryMutation()

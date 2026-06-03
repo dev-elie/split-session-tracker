@@ -3,45 +3,23 @@ package com.splitmanager.persistence;
 import com.splitmanager.models.Session;
 import java.util.ArrayList;
 import java.util.List;
+import lombok.Getter;
+import lombok.Setter;
 
 public class SessionStorageData
 {
 	public static final int CURRENT_SCHEMA_VERSION = 1;
 
+	@Setter
+	@Getter
 	private int schemaVersion = CURRENT_SCHEMA_VERSION;
+	@Setter
+	@Getter
 	private String currentSessionId;
+	@Setter
+	@Getter
 	private boolean historyLoaded;
 	private List<Session> sessions = new ArrayList<>();
-
-	public int getSchemaVersion()
-	{
-		return schemaVersion;
-	}
-
-	public void setSchemaVersion(int schemaVersion)
-	{
-		this.schemaVersion = schemaVersion;
-	}
-
-	public String getCurrentSessionId()
-	{
-		return currentSessionId;
-	}
-
-	public void setCurrentSessionId(String currentSessionId)
-	{
-		this.currentSessionId = currentSessionId;
-	}
-
-	public boolean isHistoryLoaded()
-	{
-		return historyLoaded;
-	}
-
-	public void setHistoryLoaded(boolean historyLoaded)
-	{
-		this.historyLoaded = historyLoaded;
-	}
 
 	public List<Session> getSessions()
 	{

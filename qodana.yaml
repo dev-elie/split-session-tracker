@@ -18,10 +18,10 @@ profile:
 #  - name: <SomeEnabledInspectionId>
 
 #Disable inspections
-#exclude:
-#  - name: <SomeDisabledInspectionId>
-#    paths:
-#      - <path/where/not/run/inspection>
+exclude:
+  - name: All
+    paths:
+      - src/test
 
 projectJDK: "23" #(Applied in CI/CD pipeline)
 

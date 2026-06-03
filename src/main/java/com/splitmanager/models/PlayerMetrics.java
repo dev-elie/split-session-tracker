@@ -1,11 +1,14 @@
 package com.splitmanager.models;
 
+import lombok.Getter;
+
 /**
  * Aggregate row to display per-player totals and split deltas for a session thread.
  * total = sum of that player's kills across all sessions in the thread.
  * split = sum over each session in the thread of (avgOfThatSessionRoster - playerTotalInThatSession).
  * activePlayer indicates whether the player is on the provided session's current roster.
  */
+@Getter
 public class PlayerMetrics
 {
 	public final String player;
@@ -21,23 +24,4 @@ public class PlayerMetrics
 		this.activePlayer = activePlayer;
 	}
 
-	public String getPlayer()
-	{
-		return player;
-	}
-
-	public long getTotal()
-	{
-		return total;
-	}
-
-	public long getSplit()
-	{
-		return split;
-	}
-
-	public boolean isActivePlayer()
-	{
-		return activePlayer;
-	}
 }

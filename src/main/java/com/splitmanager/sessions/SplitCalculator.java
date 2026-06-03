@@ -11,6 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import lombok.Getter;
 
 /**
  * Pure split calculation for a session thread.
@@ -165,6 +166,7 @@ public class SplitCalculator
 		return total;
 	}
 
+	@Getter
 	public static final class GeTaxSettings
 	{
 		private final boolean enabled;
@@ -185,24 +187,5 @@ public class SplitCalculator
 			return new GeTaxSettings(false, 0L, 0.0d, 0L);
 		}
 
-		public boolean isEnabled()
-		{
-			return enabled;
-		}
-
-		public long getMinimumValue()
-		{
-			return minimumValue;
-		}
-
-		public double getPercent()
-		{
-			return percent;
-		}
-
-		public long getMaxTaxPerLoot()
-		{
-			return maxTaxPerLoot;
-		}
 	}
 }

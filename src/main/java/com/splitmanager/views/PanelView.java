@@ -40,6 +40,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import javax.annotation.Nonnull;
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -515,13 +516,28 @@ public class PanelView extends PluginPanel
 		t.getColumnModel().getColumn(3).setMaxWidth(36);
 
 		// Row-aware player editor
+		DefaultCellEditor playerEditor = getDefaultCellEditor();
+		t.getColumnModel().getColumn(1).setCellEditor(playerEditor);
+
+		// Amount editor (existing)
+		JFormattedTextField amtField = new JFormattedTextField(new DefaultFormatterFactory(new Formats.OsrsAmountFormatter()));
+		amtField.setBorder(null);
+		DefaultCellEditor amtEditor = new DefaultCellEditor(amtField);
+		t.getColumnModel().getColumn(2).setCellEditor(amtEditor);
+
+		return t;
+	}
+
+	@Nonnull
+	private DefaultCellEditor getDefaultCellEditor()
+	{
 		final JComboBox<String> playerCombo = new JComboBox<>();
-		javax.swing.DefaultCellEditor playerEditor = new javax.swing.DefaultCellEditor(playerCombo)
+		return new DefaultCellEditor(playerCombo)
 		{
-			private static final long serialVersionUID = 1L;
+			private static final long serialVersionUID1 = 1L;
 
 			@Override
-			public java.awt.Component getTableCellEditorComponent(
+			public Component getTableCellEditorComponent(
 				JTable table, Object value, boolean isSelected, int row, int column)
 			{
 				// Determine players for this row's session
@@ -549,15 +565,6 @@ public class PanelView extends PluginPanel
 				return playerCombo;
 			}
 		};
-		t.getColumnModel().getColumn(1).setCellEditor(playerEditor);
-
-		// Amount editor (existing)
-		JFormattedTextField amtField = new JFormattedTextField(new DefaultFormatterFactory(new Formats.OsrsAmountFormatter()));
-		amtField.setBorder(null);
-		DefaultCellEditor amtEditor = new DefaultCellEditor(amtField);
-		t.getColumnModel().getColumn(2).setCellEditor(amtEditor);
-
-		return t;
 	}
 
 	private JPanel generateAddSplit()
@@ -1029,19 +1036,7 @@ public class PanelView extends PluginPanel
 		}
 
 		// Editor for Player column (use known players list)
-		final JComboBox<String> wlPlayerCombo = new JComboBox<>();
-		DefaultCellEditor wlPlayerEditor = new DefaultCellEditor(wlPlayerCombo)
-		{
-			private static final long serialVersionUID = 1L;
-
-			@Override
-			public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column)
-			{
-				wlPlayerCombo.setModel(new DefaultComboBoxModel<>(playerManager.getKnownMains().toArray(new String[0])));
-				wlPlayerCombo.setSelectedItem(value);
-				return wlPlayerCombo;
-			}
-		};
+		DefaultCellEditor wlPlayerEditor = getCellEditor();
 		if (waitlistTable.getColumnModel().getColumnCount() > 2)
 		{
 			waitlistTable.getColumnModel().getColumn(2).setCellEditor(wlPlayerEditor);
@@ -1086,6 +1081,24 @@ public class PanelView extends PluginPanel
 			waitlistTable.getSelectionModel().setSelectionInterval(0, 0);
 		}
 		return p;
+	}
+
+	@Nonnull
+	private DefaultCellEditor getCellEditor()
+	{
+		final JComboBox<String> wlPlayerCombo = new JComboBox<>();
+		return new DefaultCellEditor(wlPlayerCombo)
+		{
+			private static final long serialVersionUID1 = 1L;
+
+			@Override
+			public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column)
+			{
+				wlPlayerCombo.setModel(new DefaultComboBoxModel<>(playerManager.getKnownMains().toArray(new String[0])));
+				wlPlayerCombo.setSelectedItem(value);
+				return wlPlayerCombo;
+			}
+		};
 	}
 
 	private JComponent generateWaitlistPanelCollapsible()

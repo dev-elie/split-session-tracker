@@ -1,5 +1,8 @@
 package com.splitmanager.views.graph;
 
+import lombok.Getter;
+
+@Getter
 public enum SessionGraphMode
 {
 	GP_PER_HOUR("GP/hr over time", "Cumulative loot divided by elapsed session time.", true),
@@ -15,21 +18,6 @@ public enum SessionGraphMode
 		this.label = label;
 		this.description = description;
 		this.lineChart = lineChart;
-	}
-
-	public String getLabel()
-	{
-		return label;
-	}
-
-	public String getDescription()
-	{
-		return description;
-	}
-
-	public boolean isLineChart()
-	{
-		return lineChart;
 	}
 
 	@Override

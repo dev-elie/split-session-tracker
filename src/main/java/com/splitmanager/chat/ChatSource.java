@@ -1,5 +1,8 @@
 package com.splitmanager.chat;
 
+import lombok.Getter;
+
+@Getter
 public enum ChatSource
 {
 	CLAN("Clan"),
@@ -12,8 +15,4 @@ public enum ChatSource
 		this.label = label;
 	}
 
-	public String getLabel()
-	{
-		return label;
-	}
 }

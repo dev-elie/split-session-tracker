@@ -3,12 +3,14 @@ package com.splitmanager.utils;
 import java.awt.Color;
 import java.awt.Dimension;
 import lombok.Getter;
+import lombok.Setter;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPanel;
 import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.ui.overlay.components.LineComponent;
 import net.runelite.client.ui.overlay.components.TitleComponent;
 
+@Setter
 @Getter
 public class ChatStatusOverlay extends OverlayPanel
 {
@@ -18,11 +20,6 @@ public class ChatStatusOverlay extends OverlayPanel
 	{
 		setPosition(OverlayPosition.TOP_LEFT);
 		setLayer(OverlayLayer.ABOVE_SCENE);
-	}
-
-	public void setVisible(boolean visible)
-	{
-		this.visible = visible;
 	}
 
 	@Override

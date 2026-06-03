@@ -3,7 +3,9 @@ package com.splitmanager.views.graph;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import lombok.Getter;
 
+@Getter
 public final class SessionGraphSnapshot
 {
 	private final SessionGraphMode mode;
@@ -39,46 +41,6 @@ public final class SessionGraphSnapshot
 	public static SessionGraphSnapshot empty(SessionGraphMode mode)
 	{
 		return new SessionGraphSnapshot(mode, Collections.emptyList(), 0L, 0L, "", 0L, null, null);
-	}
-
-	public SessionGraphMode getMode()
-	{
-		return mode;
-	}
-
-	public List<SessionGraphEntry> getEntries()
-	{
-		return entries;
-	}
-
-	public long getTotalLoot()
-	{
-		return totalLoot;
-	}
-
-	public long getGpPerHour()
-	{
-		return gpPerHour;
-	}
-
-	public String getTopPlayer()
-	{
-		return topPlayer;
-	}
-
-	public long getTopPlayerTotal()
-	{
-		return topPlayerTotal;
-	}
-
-	public Instant getStart()
-	{
-		return start;
-	}
-
-	public Instant getEnd()
-	{
-		return end;
 	}
 
 	public boolean isEmpty()

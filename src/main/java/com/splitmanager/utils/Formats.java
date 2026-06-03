@@ -156,7 +156,7 @@ public class Formats
 
 			// Use BigDecimal to avoid precision issues for large numbers
 			BigDecimal val = BigDecimal.valueOf(amountK)
-				.divide(BigDecimal.valueOf(divK));
+				.divide(BigDecimal.valueOf(divK), 3, RoundingMode.HALF_UP);
 
 			// Format with up to 3 decimals, trimming trailing zeros
 			String num = localDF.format(val);

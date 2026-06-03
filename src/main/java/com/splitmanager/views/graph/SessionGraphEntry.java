@@ -1,5 +1,8 @@
 package com.splitmanager.views.graph;
 
+import lombok.Getter;
+
+@Getter
 public final class SessionGraphEntry
 {
 	private final String label;
@@ -13,18 +16,4 @@ public final class SessionGraphEntry
 		this.active = active;
 	}
 
-	public String getLabel()
-	{
-		return label;
-	}
-
-	public long getValue()
-	{
-		return value;
-	}
-
-	public boolean isActive()
-	{
-		return active;
-	}
 }

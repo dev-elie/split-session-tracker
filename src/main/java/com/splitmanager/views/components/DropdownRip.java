@@ -6,6 +6,7 @@ import java.awt.FlowLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
+import javax.annotation.Nonnull;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.ImageIcon;
@@ -113,17 +114,7 @@ public class DropdownRip extends JPanel
 			section.setLayout(new BoxLayout(section, BoxLayout.Y_AXIS));
 			section.setMinimumSize(new Dimension(PANEL_WIDTH, 0));
 
-			final JPanel sectionHeader = new JPanel();
-			sectionHeader.setLayout(new BorderLayout());
-			sectionHeader.setMinimumSize(new Dimension(PANEL_WIDTH, 0));
-			// For whatever reason, the header extends out by a single pixel when closed. Adding a single pixel of
-			// border on the right only affects the width when closed, fixing the issue.
-			if (!expanded)
-			{
-				sectionHeader.setBorder(new CompoundBorder(
-					new MatteBorder(0, 0, 1, 0, ColorScheme.MEDIUM_GRAY_COLOR),
-					new EmptyBorder(0, 0, 3, 1)));
-			}
+			final JPanel sectionHeader = getJPanel();
 			section.add(sectionHeader, BorderLayout.NORTH);
 
 			sectionToggle = new JButton(expanded ? SECTION_RETRACT_ICON : SECTION_EXPAND_ICON);
@@ -201,6 +192,23 @@ public class DropdownRip extends JPanel
 			sectionName.addMouseListener(click);
 			sectionHeader.addMouseListener(click);
 			sectionToggle.addActionListener(a -> toggle());
+		}
+
+		@Nonnull
+		private JPanel getJPanel()
+		{
+			final JPanel sectionHeader = new JPanel();
+			sectionHeader.setLayout(new BorderLayout());
+			sectionHeader.setMinimumSize(new Dimension(PANEL_WIDTH, 0));
+			// For whatever reason, the header extends out by a single pixel when closed. Adding a single pixel of
+			// border on the right only affects the width when closed, fixing the issue.
+			if (!expanded)
+			{
+				sectionHeader.setBorder(new CompoundBorder(
+					new MatteBorder(0, 0, 1, 0, ColorScheme.MEDIUM_GRAY_COLOR),
+					new EmptyBorder(0, 0, 3, 1)));
+			}
+			return sectionHeader;
 		}
 
 		private void styleHeaderControl(JComponent component)

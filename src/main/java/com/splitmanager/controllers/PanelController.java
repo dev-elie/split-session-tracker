@@ -889,11 +889,10 @@ public class PanelController implements PanelActions
 		view.getNotInCurrentSessionPlayerDropdown().setEnabled(canMutateSession);
 		view.getBtnRemoveFromSession().setEnabled(canMutateSession);
 
-		boolean canAddKill = canMutateSession;
 		boolean hasSessionPlayers = view.getCurrentSessionPlayerDropdown().getItemCount() > 0;
 
-		view.getBtnAddKill().setEnabled(canAddKill && hasSessionPlayers);
-		view.getKillAmountField().setEnabled(canAddKill && hasSessionPlayers);
+		view.getBtnAddKill().setEnabled(canMutateSession && hasSessionPlayers);
+		view.getKillAmountField().setEnabled(canMutateSession && hasSessionPlayers);
 
 		int waitlistRows = view.getWaitlistTableModel().getRowCount();
 
