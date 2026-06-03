@@ -16,8 +16,10 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
@@ -570,6 +572,78 @@ public class ManagerSessionTest
 		assertEquals(Session.CURRENT_PLUGIN_VERSION, historyRoot.getPluginVersion());
 		assertTrue(managerSession.loadHistory(historyRoot.getId()).isPresent());
 		assertFalse(managerSession.isCurrentHistoryEditLocked());
+	}
+
+	@Test
+	public void testSessionThreadCapturesAltMappingSnapshots()
+	{
+		Map<String, String> startMapping = new LinkedHashMap<>();
+		startMapping.put("AltStart", "MainStart");
+		Map<String, String> endMapping = new LinkedHashMap<>();
+		endMapping.put("AltEnd", "MainEnd");
+		when(playerManager.getAltMainMapping()).thenReturn(startMapping, endMapping);
+
+		managerSession.startSession();
+		managerSession.stopSession();
+
+		Session historyRoot = managerSession.getHistorySessionsNewestFirst().get(0);
+		assertEquals("MainStart", historyRoot.getAltMappingAtStart().get("AltStart"));
+		assertEquals("MainEnd", historyRoot.getAltMappingAtEnd().get("AltEnd"));
+	}
+
+	@Test
+	public void testCurrentThreadContainsRawAltNameAcrossChildSessions()
+	{
+		managerSession.startSession();
+		resolveToSelf("MainPlayer", "AltPlayer");
+
+		managerSession.addPlayerToActive("MainPlayer");
+		managerSession.addLoot("MainPlayer", 100000L);
+		assertTrue(managerSession.addPlayerToActive("AltPlayer"));
+
+		assertTrue(managerSession.currentThreadContainsPlayerName("altplayer"));
+		assertFalse(managerSession.currentThreadContainsPlayerName("GhostAlt"));
+	}
+
+	@Test
+	public void testHistoryUsesStoredAltMappingInsteadOfCurrentMapping()
+	{
+		Map<String, String> snapshot = new LinkedHashMap<>();
+		snapshot.put("AltPlayer", "OriginalMain");
+		when(playerManager.getAltMainMapping()).thenReturn(snapshot);
+		when(playerManager.getMainName("OriginalMain")).thenReturn("OriginalMain");
+		lenient().when(playerManager.getMainName("AltPlayer")).thenReturn("CurrentMain");
+
+		managerSession.startSession();
+		managerSession.addPlayerToActive("OriginalMain");
+		managerSession.stopSession();
+
+		Session historyRoot = managerSession.getHistorySessionsNewestFirst().get(0);
+		assertTrue(managerSession.loadHistory(historyRoot.getId()).isPresent());
+
+		assertTrue(managerSession.addLoot("AltPlayer", 100000L));
+		assertTrue(managerSession.getAllEvents().stream().anyMatch(event ->
+			"OriginalMain".equals(event.getPlayer()) && Long.valueOf(100000L).equals(event.getAmount())));
+	}
+
+	@Test
+	public void testLegacyHistoryWithoutAltSnapshotUsesRecordedNames()
+	{
+		lenient().when(playerManager.getMainName("AltPlayer")).thenReturn("CurrentMain");
+		String json = "["
+			+ "{\"id\":\"root\",\"start\":\"1970-01-01T00:00:00Z\",\"end\":\"1970-01-01T00:00:10Z\","
+			+ "\"pluginVersion\":\"3.1.0\",\"players\":[],\"events\":[]},"
+			+ "{\"id\":\"child\",\"start\":\"1970-01-01T00:00:01Z\",\"end\":\"1970-01-01T00:00:10Z\",\"motherId\":\"root\","
+			+ "\"pluginVersion\":\"3.1.0\",\"players\":[\"AltPlayer\"],\"events\":[]}"
+			+ "]";
+
+		assertEquals(1, managerSession.importHistorySessionsJson(json));
+		Session historyRoot = managerSession.getHistorySessionsNewestFirst().get(0);
+		assertTrue(managerSession.loadHistory(historyRoot.getId()).isPresent());
+
+		assertTrue(managerSession.addLoot("AltPlayer", 100000L));
+		assertTrue(managerSession.getAllEvents().stream().anyMatch(event ->
+			"AltPlayer".equals(event.getPlayer()) && Long.valueOf(100000L).equals(event.getAmount())));
 	}
 
 	@Test

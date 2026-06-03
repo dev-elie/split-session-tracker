@@ -3,8 +3,10 @@ package com.splitmanager.models;
 import com.google.gson.annotations.SerializedName;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import lombok.Getter;
 import lombok.Setter;
@@ -90,6 +92,16 @@ public class Session
 	 */
 	@Setter
 	private SettlementConfigSnapshot settlementConfigAtEnd;
+	/**
+	 * Alt-to-main mappings captured when a mother thread starts. Only meaningful on mother sessions.
+	 */
+	@Setter
+	private Map<String, String> altMappingAtStart;
+	/**
+	 * Alt-to-main mappings captured when a mother thread ends. Only meaningful on mother sessions.
+	 */
+	@Setter
+	private Map<String, String> altMappingAtEnd;
 
 	/**
 	 * Create a new Session segment.
@@ -128,5 +140,15 @@ public class Session
 	public boolean hasLootEvents()
 	{
 		return events.stream().anyMatch(SplitEvent::isLootEvent);
+	}
+
+	public Map<String, String> getAltMappingAtStart()
+	{
+		return altMappingAtStart == null ? null : new LinkedHashMap<>(altMappingAtStart);
+	}
+
+	public Map<String, String> getAltMappingAtEnd()
+	{
+		return altMappingAtEnd == null ? null : new LinkedHashMap<>(altMappingAtEnd);
 	}
 }

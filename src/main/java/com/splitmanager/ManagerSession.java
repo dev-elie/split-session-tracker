@@ -506,7 +506,58 @@ public class ManagerSession
 		{
 			return null;
 		}
+		if (historyLoaded)
+		{
+			return resolveHistoricalMainName(trimmed);
+		}
 		return playerManager.getMainName(trimmed);
+	}
+
+	private String resolveHistoricalMainName(String player)
+	{
+		Map<String, String> altSnapshot = getCurrentThreadAltMappingSnapshot();
+		if (altSnapshot == null)
+		{
+			return player;
+		}
+		return resolveNameWithMapping(player, altSnapshot);
+	}
+
+	private String resolveNameWithMapping(String player, Map<String, String> altMapping)
+	{
+		String resolved = player;
+		String visited = null;
+		for (int i = 0; i < 5; i++)
+		{
+			String mapped = getMappedMain(resolved, altMapping);
+			if (mapped == null || mapped.equalsIgnoreCase(resolved))
+			{
+				return resolved;
+			}
+			if (visited != null && visited.equalsIgnoreCase(mapped))
+			{
+				break;
+			}
+			visited = resolved;
+			resolved = mapped;
+		}
+		return resolved;
+	}
+
+	private String getMappedMain(String alt, Map<String, String> altMapping)
+	{
+		if (alt == null || altMapping == null)
+		{
+			return null;
+		}
+		for (Map.Entry<String, String> entry : altMapping.entrySet())
+		{
+			if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(alt))
+			{
+				return entry.getValue();
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -760,6 +811,8 @@ public class ManagerSession
 		copy.setPluginVersion(source.getPluginVersion());
 		copy.setSettlementConfigAtStart(source.getSettlementConfigAtStart());
 		copy.setSettlementConfigAtEnd(source.getSettlementConfigAtEnd());
+		copy.setAltMappingAtStart(source.getAltMappingAtStart());
+		copy.setAltMappingAtEnd(source.getAltMappingAtEnd());
 		if (source.getPlayers() != null)
 		{
 			copy.getPlayers().addAll(source.getPlayers());
@@ -1008,6 +1061,7 @@ public class ManagerSession
 		// Create mother and an initial child immediately (to mirror sheet)
 		Session mother = new Session(newId(), Instant.now(), null);
 		mother.setSettlementConfigAtStart(currentSettlementConfigSnapshot());
+		mother.setAltMappingAtStart(currentAltMappingSnapshot());
 		sessions.put(mother.getId(), mother);
 		// initialize empty cache list for this mother thread
 		motherEventsCache.put(mother.getId(), new ArrayList<>());
@@ -1052,6 +1106,7 @@ public class ManagerSession
 			if (mother != null && mother.isActive())
 			{
 				mother.setSettlementConfigAtEnd(currentSettlementConfigSnapshot());
+				mother.setAltMappingAtEnd(currentAltMappingSnapshot());
 				mother.setEnd(Instant.now());
 			}
 		}
@@ -1402,6 +1457,39 @@ public class ManagerSession
 			e.equalsIgnoreCase(mainPlayer));
 	}
 
+	public boolean currentThreadContainsPlayerName(String player)
+	{
+		if (player == null || player.trim().isEmpty())
+		{
+			return false;
+		}
+		Session current = getCurrentSession().orElse(null);
+		if (current == null)
+		{
+			return false;
+		}
+		String target = player.trim();
+		for (Session session : getThreadSessions(current))
+		{
+			if (session == null || session.getMotherId() == null)
+			{
+				continue;
+			}
+			if (session.getPlayers().stream().anyMatch(existing -> existing.equalsIgnoreCase(target)))
+			{
+				return true;
+			}
+			for (SplitEvent event : session.getEvents())
+			{
+				if (event != null && event.getPlayer() != null && event.getPlayer().equalsIgnoreCase(target))
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	public void init()
 	{
 		loadFromConfig();
@@ -1661,6 +1749,32 @@ public class ManagerSession
 			defaultString(config.geTaxMinimumValue(), PluginConfig.DEFAULT_GE_TAX_MINIMUM_VALUE),
 			config.geTaxPercent(),
 			defaultString(config.geTaxMaxPerLoot(), PluginConfig.DEFAULT_GE_TAX_MAX_PER_LOOT_VALUE));
+	}
+
+	private Map<String, String> currentAltMappingSnapshot()
+	{
+		Map<String, String> mapping = playerManager == null ? null : playerManager.getAltMainMapping();
+		return mapping == null ? new LinkedHashMap<>() : new LinkedHashMap<>(mapping);
+	}
+
+	private Map<String, String> getCurrentThreadAltMappingSnapshot()
+	{
+		Session current = getCurrentSession().orElse(null);
+		if (current == null)
+		{
+			return null;
+		}
+		Session mother = sessions.get(getRootSessionId(current));
+		if (mother == null)
+		{
+			return null;
+		}
+		Map<String, String> endSnapshot = mother.getAltMappingAtEnd();
+		if (endSnapshot != null)
+		{
+			return endSnapshot;
+		}
+		return mother.getAltMappingAtStart();
 	}
 
 	private String defaultString(String value, String defaultValue)

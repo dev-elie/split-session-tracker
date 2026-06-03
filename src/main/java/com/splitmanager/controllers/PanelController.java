@@ -242,19 +242,19 @@ public class PanelController implements PanelActions
 	@Override
 	public void addAltToMain(String main, String alt)
 	{
-		if (sessionManager.hasActiveSession())
-		{
-			toast(view, "Cannot add/remove alts while session is active. Stop session first.");
-			return;
-		}
 		if (main == null || alt == null)
 		{
 			toast(view, "Select a player and an alt to add.");
 			return;
 		}
+		if (sessionManager.hasActiveSession() && sessionManager.currentThreadContainsPlayerName(alt))
+		{
+			toast(view, "Cannot link: this alt already appears in the current session history.");
+			return;
+		}
 		if (!playerManager.canLinkAltToMain(alt, main))
 		{
-			toast(view, "Cannot link: either main is an alt, alt already linked, or alt is a main.");
+			toast(view, "Cannot link: main/alt relation is invalid.");
 			return;
 		}
 		if (playerManager.trySetAltMain(alt, main))
