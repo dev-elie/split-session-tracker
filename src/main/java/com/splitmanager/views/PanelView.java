@@ -534,7 +534,6 @@ public class PanelView extends PluginPanel
 		final JComboBox<String> playerCombo = new JComboBox<>();
 		return new DefaultCellEditor(playerCombo)
 		{
-			private static final long serialVersionUID1 = 1L;
 
 			@Override
 			public Component getTableCellEditorComponent(
@@ -1089,7 +1088,6 @@ public class PanelView extends PluginPanel
 		final JComboBox<String> wlPlayerCombo = new JComboBox<>();
 		return new DefaultCellEditor(wlPlayerCombo)
 		{
-			private static final long serialVersionUID1 = 1L;
 
 			@Override
 			public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column)
