@@ -172,5 +172,5 @@ public interface PanelActions
 
 	void tourNext();
 
-	void tourEnd();
+	void tourEnd(boolean updateInfo);
 }

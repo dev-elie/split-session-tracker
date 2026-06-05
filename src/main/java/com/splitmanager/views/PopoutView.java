@@ -1,5 +1,6 @@
 package com.splitmanager.views;
 
+import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.splitmanager.ManagerKnownPlayers;
 import com.splitmanager.ManagerSession;
 import com.splitmanager.PluginConfig;
@@ -14,13 +15,18 @@ import com.splitmanager.views.graph.SessionGraphMode;
 import com.splitmanager.views.graph.SessionGraphPanel;
 import com.splitmanager.views.graph.SessionGraphSnapshot;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.ComponentOrientation;
+import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridLayout;
+import java.awt.Point;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -47,8 +53,10 @@ import javax.swing.SwingConstants;
 import javax.swing.Timer;
 import javax.swing.TransferHandler;
 import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableCellEditor;
 import javax.swing.table.TableCellRenderer;
+import javax.swing.border.Border;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.util.ImageUtil;
@@ -62,7 +70,19 @@ public class PopoutView extends PanelView
 	private static final Dimension LEFT_PANE_PREFERRED_SIZE = new Dimension(330, 600);
 	private static final Dimension LEFT_PANE_MINIMUM_SIZE = new Dimension(180, 0);
 	private static final Dimension RIGHT_PANE_MINIMUM_SIZE = new Dimension(260, 0);
+	private static final Color EDIT_TABLE_BACKGROUND = ColorScheme.DARKER_GRAY_COLOR;
+	private static final Color EDIT_TABLE_ROW_BACKGROUND = ColorScheme.DARK_GRAY_COLOR;
+	private static final Color EDIT_TABLE_HOVER_BACKGROUND = new Color(58, 52, 43);
+	private static final Color EDIT_TABLE_SELECTED_BACKGROUND = new Color(72, 61, 44);
+	private static final Border EDIT_TABLE_BORDER = BorderFactory.createCompoundBorder(
+		BorderFactory.createLineBorder(ColorScheme.BRAND_ORANGE, 2),
+		BorderFactory.createEmptyBorder(3, 3, 3, 3));
+	private static final Border LOCKED_TABLE_BORDER = BorderFactory.createCompoundBorder(
+		BorderFactory.createLineBorder(ColorScheme.BORDER_COLOR, 2),
+		BorderFactory.createEmptyBorder(3, 3, 3, 3));
 	private static final ImageIcon DELETE_ICON = loadDeleteIcon();
+	private static final FlatSVGIcon DRAG_HANDLE_ICON = new FlatSVGIcon(
+		PopoutView.class.getResource("/com/splitmanager/icons/drag-handle.svg")).derive(16, 16);
 
 	private SessionGraphPanel graphPanel;
 	private JComboBox<SessionGraphMode> graphModeDropdown;
@@ -206,15 +226,15 @@ public class PopoutView extends PanelView
 
 		HistoryTableModel model = new HistoryTableModel();
 		JTable table = new JTable(model);
-		table.setRowHeight(24);
-		table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
 		boolean editable = !getSessionManager().isCurrentHistoryEditLocked();
-		table.setDragEnabled(editable);
+		configureHistoryTable(table, model, editable);
 		if (editable)
 		{
 			table.setDropMode(javax.swing.DropMode.INSERT_ROWS);
 			table.setTransferHandler(new HistoryTransferHandler(model));
 		}
+		table.getColumnModel().getColumn(HistoryTableModel.DRAG_COLUMN).setMinWidth(38);
+		table.getColumnModel().getColumn(HistoryTableModel.DRAG_COLUMN).setMaxWidth(46);
 		table.getColumnModel().getColumn(HistoryTableModel.DELETE_COLUMN).setMinWidth(34);
 		table.getColumnModel().getColumn(HistoryTableModel.DELETE_COLUMN).setMaxWidth(42);
 		table.getColumnModel().getColumn(HistoryTableModel.DELETE_COLUMN).setCellRenderer(new DeleteButtonRenderer(model));
@@ -224,13 +244,58 @@ public class PopoutView extends PanelView
 		}
 
 		panel.add(header, BorderLayout.NORTH);
-		panel.add(new JScrollPane(table), BorderLayout.CENTER);
+		JScrollPane tableScrollPane = new JScrollPane(table);
+		tableScrollPane.setBorder(editable ? EDIT_TABLE_BORDER : LOCKED_TABLE_BORDER);
+		tableScrollPane.getViewport().setBackground(EDIT_TABLE_BACKGROUND);
+		panel.add(tableScrollPane, BorderLayout.CENTER);
 
 		JLabel hint = new JLabel("Click trash to delete. Linked joins ask for a second click. Drag to reorder.", SwingConstants.CENTER);
 		hint.setFont(hint.getFont().deriveFont(hint.getFont().getSize2D() + 1.0f));
 		panel.add(hint, BorderLayout.SOUTH);
 
 		return panel;
+	}
+
+	private void configureHistoryTable(JTable table, HistoryTableModel model, boolean editable)
+	{
+		table.setRowHeight(30);
+		table.setShowGrid(false);
+		table.setIntercellSpacing(new Dimension(0, 1));
+		table.setFillsViewportHeight(true);
+		table.setBackground(EDIT_TABLE_BACKGROUND);
+		table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+		table.setDragEnabled(editable);
+		table.setCursor(editable ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR) : Cursor.getDefaultCursor());
+		table.getTableHeader().setReorderingAllowed(false);
+		table.getTableHeader().setToolTipText(editable ? "Drag rows to reorder history" : null);
+
+		HistoryCellRenderer cellRenderer = new HistoryCellRenderer(model);
+		table.setDefaultRenderer(Object.class, cellRenderer);
+		table.setDefaultRenderer(Long.class, cellRenderer);
+		table.getColumnModel().getColumn(HistoryTableModel.DRAG_COLUMN).setCellRenderer(new DragHandleRenderer(model));
+
+		table.addMouseMotionListener(new MouseAdapter()
+		{
+			@Override
+			public void mouseMoved(MouseEvent e)
+			{
+				updateHoveredRow(table, model, e.getPoint());
+			}
+		});
+		table.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mouseExited(MouseEvent e)
+			{
+				model.setHoveredRow(-1);
+			}
+		});
+	}
+
+	private void updateHoveredRow(JTable table, HistoryTableModel model, Point point)
+	{
+		int row = table.rowAtPoint(point);
+		model.setHoveredRow(row < 0 ? -1 : table.convertRowIndexToModel(row));
 	}
 
 	private JComponent wrapSidebar(Component[] sidebarComponents)
@@ -442,11 +507,15 @@ public class PopoutView extends PanelView
 	private class HistoryTableModel extends AbstractTableModel
 	{
 
-		private static final int DELETE_COLUMN = 4;
-		private final String[] columns = {"Time", "Player", "Amount", "Type", "X"};
+		private static final int DRAG_COLUMN = 0;
+		private static final int PLAYER_COLUMN = 2;
+		private static final int AMOUNT_COLUMN = 3;
+		private static final int DELETE_COLUMN = 5;
+		private final String[] columns = {"Move", "Time", "Player", "Amount", "Type", "X"};
 		private List<SplitEvent> events = new ArrayList<>();
 		private int pendingRosterDeleteRow = -1;
 		private int pendingRosterDeleteLinkedRow = -1;
+		private int hoveredRow = -1;
 
 		HistoryTableModel()
 		{
@@ -464,6 +533,30 @@ public class PopoutView extends PanelView
 		{
 			return rowIndex >= 0
 				&& (rowIndex == pendingRosterDeleteRow || rowIndex == pendingRosterDeleteLinkedRow);
+		}
+
+		boolean isHoveredRow(int rowIndex)
+		{
+			return rowIndex >= 0 && rowIndex == hoveredRow;
+		}
+
+		void setHoveredRow(int hoveredRow)
+		{
+			if (this.hoveredRow == hoveredRow)
+			{
+				return;
+			}
+
+			int previous = this.hoveredRow;
+			this.hoveredRow = hoveredRow;
+			if (previous >= 0 && previous < getRowCount())
+			{
+				fireTableRowsUpdated(previous, previous);
+			}
+			if (hoveredRow >= 0 && hoveredRow < getRowCount())
+			{
+				fireTableRowsUpdated(hoveredRow, hoveredRow);
+			}
 		}
 
 		void markPendingRosterDelete(int rowIndex, int linkedRowIndex)
@@ -569,13 +662,15 @@ public class PopoutView extends PanelView
 			SplitEvent k = events.get(rowIndex);
 			switch (columnIndex)
 			{
-				case 0:
-					return Formats.getLocalTime().format(java.time.ZonedDateTime.ofInstant(k.getAt(), java.time.ZoneId.systemDefault()));
+				case DRAG_COLUMN:
+					return DRAG_HANDLE_ICON;
 				case 1:
+					return Formats.getLocalTime().format(java.time.ZonedDateTime.ofInstant(k.getAt(), java.time.ZoneId.systemDefault()));
+				case PLAYER_COLUMN:
 					return k.getPlayer();
-				case 2:
+				case AMOUNT_COLUMN:
 					return k.getAmount();
-				case 3:
+				case 4:
 					return k.getType() == null ? "LOOT" : k.getType();
 				case DELETE_COLUMN:
 					return DELETE_ICON;
@@ -596,7 +691,7 @@ public class PopoutView extends PanelView
 			{
 				return false;
 			}
-			return columnIndex == 1 || columnIndex == 2 || columnIndex == DELETE_COLUMN;
+			return columnIndex == PLAYER_COLUMN || columnIndex == AMOUNT_COLUMN || columnIndex == DELETE_COLUMN;
 		}
 
 		@Override
@@ -607,11 +702,11 @@ public class PopoutView extends PanelView
 				return;
 			}
 			SplitEvent k = events.get(rowIndex);
-			if (columnIndex == 1)
+			if (columnIndex == PLAYER_COLUMN)
 			{
 				k.setPlayer(aValue == null ? "" : aValue.toString());
 			}
-			else if (columnIndex == 2)
+			else if (columnIndex == AMOUNT_COLUMN)
 			{
 				try
 				{
@@ -628,6 +723,76 @@ public class PopoutView extends PanelView
 		}
 	}
 
+	private class HistoryCellRenderer extends DefaultTableCellRenderer
+	{
+		private final HistoryTableModel model;
+
+		HistoryCellRenderer(HistoryTableModel model)
+		{
+			this.model = model;
+			setOpaque(true);
+		}
+
+		@Override
+		public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column)
+		{
+			JLabel label = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, false, row, column);
+			int modelRow = table.convertRowIndexToModel(row);
+			label.setBackground(getHistoryRowBackground(model, modelRow, isSelected));
+			label.setForeground(model.isPendingRosterDelete(modelRow) ? ColorScheme.BRAND_ORANGE : Color.WHITE);
+			label.setBorder(getHistoryCellBorder(model, modelRow));
+			label.setToolTipText("Drag this row to reorder history");
+			return label;
+		}
+	}
+
+	private class DragHandleRenderer extends HistoryCellRenderer
+	{
+		DragHandleRenderer(HistoryTableModel model)
+		{
+			super(model);
+			setHorizontalAlignment(SwingConstants.CENTER);
+		}
+
+		@Override
+		public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column)
+		{
+			JLabel label = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+			label.setHorizontalAlignment(SwingConstants.CENTER);
+			label.setIcon(DRAG_HANDLE_ICON);
+			label.setText(null);
+			label.setToolTipText("Drag to reorder");
+			return label;
+		}
+	}
+
+	private Color getHistoryRowBackground(HistoryTableModel model, int modelRow, boolean isSelected)
+	{
+		if (model.isPendingRosterDelete(modelRow))
+		{
+			return new Color(74, 49, 34);
+		}
+		if (isSelected)
+		{
+			return EDIT_TABLE_SELECTED_BACKGROUND;
+		}
+		if (model.isHoveredRow(modelRow))
+		{
+			return EDIT_TABLE_HOVER_BACKGROUND;
+		}
+		return EDIT_TABLE_ROW_BACKGROUND;
+	}
+
+	private Border getHistoryCellBorder(HistoryTableModel model, int modelRow)
+	{
+		Color borderColor = model.isHoveredRow(modelRow) || model.isPendingRosterDelete(modelRow)
+			? ColorScheme.BRAND_ORANGE
+			: ColorScheme.BORDER_COLOR;
+		return BorderFactory.createCompoundBorder(
+			BorderFactory.createMatteBorder(1, 0, 1, 0, borderColor),
+			BorderFactory.createEmptyBorder(0, 8, 0, 8));
+	}
+
 	private class DeleteButtonRenderer implements TableCellRenderer
 	{
 		private final JButton button = createDeleteButton();
@@ -642,6 +807,8 @@ public class PopoutView extends PanelView
 		public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column)
 		{
 			int modelRow = table.convertRowIndexToModel(row);
+			button.setBackground(getHistoryRowBackground(model, modelRow, isSelected));
+			button.setBorder(getHistoryCellBorder(model, modelRow));
 			button.setToolTipText(model.isPendingRosterDelete(modelRow)
 				? "Click again to delete both linked roster events"
 				: "Remove entry");
@@ -674,6 +841,8 @@ public class PopoutView extends PanelView
 		{
 			this.table = table;
 			this.row = table.convertRowIndexToModel(row);
+			button.setBackground(getHistoryRowBackground(model, this.row, isSelected));
+			button.setBorder(getHistoryCellBorder(model, this.row));
 			button.setToolTipText(model.isPendingRosterDelete(this.row)
 				? "Click again to delete both linked roster events"
 				: "Remove entry");
@@ -804,7 +973,11 @@ public class PopoutView extends PanelView
 				{
 					if (!sessionManager.moveEvent(fromIndex, toIndex))
 					{
-						toast(PopoutView.this, "Cannot move a left event before that player joined.");
+						String message = sessionManager.getLastMoveEventFailureMessage();
+						if (message != null && !message.isBlank())
+						{
+							toast(PopoutView.this, message);
+						}
 						return false;
 					}
 					model.refresh();

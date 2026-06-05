@@ -22,6 +22,7 @@ public interface PluginConfig extends Config
 	String KEY_CURRENT_SESSION_ID = "currentSessionId";
 	String KEY_HISTORY_LOADED = "historyLoaded";
 	String KEY_PEOPLE_CSV = "PlayersCsv";
+	String KEY_TOUR_UPDATE_INFO_SEEN_VERSION = "tourUpdateInfoSeenVersion";
 	String DEFAULT_PVM_DROP_REGEX = "^(?<player>.+?) received a drop: .*?\\((?<value>\\d[\\d,]*) coins\\)";
 	String DEFAULT_PVP_LOOT_REGEX = "^(?<player>.+?) has defeated .+? and received \\((?<value>\\d[\\d,]*) coins\\) worth of loot!";
 	String DEFAULT_ADD_COMMAND_REGEX = "(?i)!add\\s+(?<values>.+)";
@@ -130,6 +131,25 @@ public interface PluginConfig extends Config
 		hidden = true
 	)
 	void enableTour(boolean value);
+
+	@ConfigItem(
+		keyName = KEY_TOUR_UPDATE_INFO_SEEN_VERSION,
+		name = "Tour update info seen version",
+		description = "Plugin version whose update tour has already been shown",
+		hidden = true
+	)
+	default String tourUpdateInfoSeenVersion()
+	{
+		return "";
+	}
+
+	@ConfigItem(
+		keyName = KEY_TOUR_UPDATE_INFO_SEEN_VERSION,
+		name = "Tour update info seen version",
+		description = "Plugin version whose update tour has already been shown",
+		hidden = true
+	)
+	void tourUpdateInfoSeenVersion(String value);
 
 	@ConfigItem(
 		keyName = "WarnNotInFC",

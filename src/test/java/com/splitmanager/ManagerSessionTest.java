@@ -1336,12 +1336,45 @@ public class ManagerSessionTest
 		assertTrue(leftIndex > joinedIndex);
 
 		assertFalse(managerSession.moveEvent(leftIndex, joinedIndex));
+		assertEquals("Cannot move a left event before that player joined.", managerSession.getLastMoveEventFailureMessage());
 
 		List<SplitEvent> after = managerSession.getAllEvents();
 		assertEquals(SplitEvent.TYPE_JOINED, after.get(joinedIndex).getType());
 		assertEquals(p2, after.get(joinedIndex).getPlayer());
 		assertEquals(SplitEvent.TYPE_LEFT, after.get(leftIndex).getType());
 		assertEquals(p2, after.get(leftIndex).getPlayer());
+	}
+
+	@Test
+	public void testMoveLootEventRejectsPositionOutsidePlayerRosterWindow()
+	{
+		managerSession.startSession();
+		String p1 = "Player1";
+		String p2 = "Player2";
+		resolveToSelf(p1, p2);
+
+		managerSession.addPlayerToActive(p1);
+		managerSession.addPlayerToActive(p2);
+		managerSession.addLoot(p2, 100000L);
+		assertTrue(managerSession.removePlayerFromSession(p2));
+		managerSession.addLoot(p1, 200000L);
+
+		List<SplitEvent> before = managerSession.getAllEvents();
+		int lootIndex = findLootEventIndex(p2, 100000L);
+		int afterLeftIndex = before.size();
+		assertTrue(lootIndex >= 0);
+
+		assertFalse(managerSession.moveEvent(lootIndex, afterLeftIndex));
+		assertEquals("Cannot move loot outside that player's time in the session.", managerSession.getLastMoveEventFailureMessage());
+
+		List<SplitEvent> after = managerSession.getAllEvents();
+		assertEquals(before.size(), after.size());
+		for (int i = 0; i < before.size(); i++)
+		{
+			assertEquals(before.get(i).getType(), after.get(i).getType());
+			assertEquals(before.get(i).getPlayer(), after.get(i).getPlayer());
+			assertEquals(before.get(i).getAmount(), after.get(i).getAmount());
+		}
 	}
 
 	@Test
@@ -1369,6 +1402,7 @@ public class ManagerSessionTest
 		assertTrue(leftIndex > joinedIndex);
 
 		assertFalse(managerSession.moveEvent(leftIndex, joinedIndex));
+		assertEquals("Cannot move a left event before that player joined.", managerSession.getLastMoveEventFailureMessage());
 
 		List<SplitEvent> afterEvents = managerSession.getAllEvents();
 		assertEquals(SplitEvent.TYPE_JOINED, afterEvents.get(joinedIndex).getType());
@@ -1471,16 +1505,19 @@ public class ManagerSessionTest
 		managerSession.addPlayerToActive("Player2");
 		managerSession.addLoot("Player1", 100L);
 
-		managerSession.insertLootAt(0, "Player1", 250L);
+		managerSession.insertLootAt(1, "Player1", 250L);
 		assertTrue(managerSession.getAllEvents().stream().anyMatch(event ->
 			Long.valueOf(250L).equals(event.getAmount()) && SplitEvent.TYPE_LOOT.equalsIgnoreCase(event.getType())));
 
 		assertFalse(managerSession.moveEvent(-1, 0));
+		assertEquals("Cannot move that history row.", managerSession.getLastMoveEventFailureMessage());
 		assertFalse(managerSession.moveEvent(0, 0));
+		assertNull(managerSession.getLastMoveEventFailureMessage());
 
 		int insertIndex = findLootEventIndex("Player1", 100L);
 		assertTrue(insertIndex >= 0);
-		assertTrue(managerSession.moveEvent(insertIndex, 0));
+		assertFalse(managerSession.moveEvent(insertIndex, 0));
+		assertEquals("Cannot move loot outside that player's time in the session.", managerSession.getLastMoveEventFailureMessage());
 	}
 
 	@Test

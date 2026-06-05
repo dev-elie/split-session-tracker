@@ -8,6 +8,7 @@ import com.splitmanager.models.Metrics;
 import com.splitmanager.models.PendingValue;
 import com.splitmanager.models.Session;
 import com.splitmanager.models.SettlementConfigSnapshot;
+import com.splitmanager.views.components.PanelTour;
 import com.splitmanager.models.WaitlistTable;
 import com.splitmanager.utils.Formats;
 import com.splitmanager.utils.MarkdownFormatter;
@@ -647,15 +648,22 @@ public class PanelController implements PanelActions
 	}
 
 	@Override
-	public void tourEnd()
+	public void tourEnd(boolean updateInfo)
 	{
 		try
 		{
-			config.enableTour(false);
+			if (updateInfo)
+			{
+				config.tourUpdateInfoSeenVersion(PanelTour.UPDATE_INFO_VERSION);
+			}
+			else
+			{
+				config.enableTour(false);
+			}
 		}
 		catch (RuntimeException e)
 		{
-			log.warn("Failed to persist tour disabled state", e);
+			log.warn("Failed to persist tour state", e);
 		}
 		view.endTour();
 	}

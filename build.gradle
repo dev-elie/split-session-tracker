@@ -29,6 +29,13 @@ dependencies {
 	testImplementation group: 'net.runelite', name:'jshell', version: runeLiteVersion
 }
 
+sourceSets {
+	runelitePatch {
+		java.srcDir 'src/runelitePatch/java'
+		compileClasspath += configurations.testRuntimeClasspath
+	}
+}
+
 group = 'com.splitmanager'
 version = '3.1.0' // Also tracked in Session.java CURRENT_PLUGIN_VERSION
 
@@ -88,10 +95,48 @@ jacocoTestCoverageVerification {
 
 check.dependsOn jacocoTestCoverageVerification
 
+def isRuneLiteClientJar = { File file ->
+	file.name ==~ /client-\d+\.\d+\.\d+(\.\d+)?(-\d{8}\.\d{6}-\d+)?\.jar/ &&
+		file.absolutePath.contains('/net.runelite/client/')
+}
+
+def runeLiteClientJar = {
+	configurations.testRuntimeClasspath.files.find { file ->
+		isRuneLiteClientJar(file)
+	}
+}
+
+tasks.register('patchedRuneliteClientJar', Jar) {
+	dependsOn configurations.testRuntimeClasspath
+	dependsOn tasks.named('compileRunelitePatchJava')
+	archiveClassifier.set('runelite-client-patched')
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	from {
+		def clientJar = runeLiteClientJar()
+		if (clientJar == null) {
+			throw new GradleException('Unable to find RuneLite client jar on testRuntimeClasspath')
+		}
+		zipTree(clientJar)
+	} {
+		exclude 'META-INF/INDEX.LIST'
+		exclude 'META-INF/*.SF'
+		exclude 'META-INF/*.DSA'
+		exclude 'META-INF/*.RSA'
+		exclude 'net/runelite/client/externalplugins/ExternalPluginManager.class'
+	}
+	from sourceSets.runelitePatch.output
+}
+
 tasks.register('run', JavaExec) {
 	group = 'runelite'
 	description = 'Run RuneLite with Auto Split Manager loaded in developer mode.'
-	classpath = sourceSets.test.runtimeClasspath
+	dependsOn tasks.named('patchedRuneliteClientJar')
+	classpath = files(
+		sourceSets.test.output,
+		sourceSets.main.output,
+		tasks.named('patchedRuneliteClientJar'),
+		configurations.testRuntimeClasspath.filter { file -> !isRuneLiteClientJar(file) }
+	)
 	mainClass.set('com.splitmanager.PluginTest')
 	args '--developer-mode', '--debug'
 }

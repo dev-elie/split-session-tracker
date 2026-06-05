@@ -8,6 +8,7 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Rectangle;
 import java.util.List;
 import java.util.function.Supplier;
 import javax.swing.BorderFactory;
@@ -18,6 +19,7 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextArea;
+import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.border.Border;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +27,8 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public final class PanelTour
 {
-	private static final List<String> STEPS = List.of(
+	public static final String UPDATE_INFO_VERSION = "3.1.0";
+	private static final List<String> QUICK_STEPS = List.of(
 		"Scroll down and add a new player: type a name in the text field and click Add Player.",
 		"Optional: The 'Known alts' dropdown lets you link an alt account to a selected known player.",
 		"Start a session using the Start button.",
@@ -36,6 +39,12 @@ public final class PanelTour
 		"Detected values: expand the 'Detected values' section. '!add' in clan chat will queue amounts here. See Settings > Chat detection to configure.",
 		"Review the Recent Splits table.",
 		"Stop the session when you are done."
+	);
+	private static final List<String> UPDATE_INFO_STEPS = List.of(
+		"History loading: stopped sessions are saved in View history. Select one and click View to review an old split thread.",
+		"Graph pop-up: click the graph button to open a wider dashboard with session charts and the same split controls.",
+		"Edit mode: click the pencil button to open the pop-up in edit mode, then adjust saved split rows when history needs correction.",
+		"GE tax: Settings > GE tax controls whether eligible loot deducts Grand Exchange tax from the seller before split balances are calculated."
 	);
 
 	private final PluginConfig config;
@@ -49,6 +58,7 @@ public final class PanelTour
 	private JButton endButton;
 	private boolean running;
 	private int step;
+	private Mode mode = Mode.QUICK;
 	private Timer rainbowTimer;
 	private JComponent highlighted;
 	private Border originalBorder;
@@ -72,6 +82,7 @@ public final class PanelTour
 
 	public void startTour()
 	{
+		mode = shouldShowUpdateInfo() ? Mode.UPDATE_INFO : Mode.QUICK;
 		running = true;
 		step = 0;
 		updateUi();
@@ -93,10 +104,11 @@ public final class PanelTour
 
 	public void endTourAndDisable()
 	{
+		final boolean updateInfo = isUpdateInfoActiveOrPending();
 		PanelActions actions = actionsSupplier.get();
 		if (actions != null)
 		{
-			actions.tourEnd();
+			actions.tourEnd(updateInfo);
 			return;
 		}
 
@@ -105,11 +117,18 @@ public final class PanelTour
 		clearHighlight();
 		try
 		{
-			config.enableTour(false);
+			if (updateInfo)
+			{
+				config.tourUpdateInfoSeenVersion(UPDATE_INFO_VERSION);
+			}
+			else
+			{
+				config.enableTour(false);
+			}
 		}
 		catch (RuntimeException e)
 		{
-			log.warn("Failed to persist tour disabled state", e);
+			log.warn("Failed to persist tour state", e);
 		}
 		updateUi();
 	}
@@ -126,7 +145,7 @@ public final class PanelTour
 
 	public void gotoStep(int nextStep)
 	{
-		int max = STEPS.size() - 1;
+		int max = getSteps().size() - 1;
 		if (nextStep < 0)
 		{
 			nextStep = 0;
@@ -190,7 +209,7 @@ public final class PanelTour
 		startButton.addActionListener(e -> dispatchOrRun(PanelActions::tourStart, this::startTour));
 		prevButton.addActionListener(e -> dispatchOrRun(PanelActions::tourPrev, this::previousStep));
 		nextButton.addActionListener(e -> dispatchOrRun(PanelActions::tourNext, this::nextStep));
-		endButton.addActionListener(e -> dispatchOrRun(PanelActions::tourEnd, this::endTourAndDisable));
+		endButton.addActionListener(e -> endTourAndDisable());
 
 		tourPanel.add(left, BorderLayout.CENTER);
 		tourPanel.add(right, BorderLayout.SOUTH);
@@ -212,7 +231,8 @@ public final class PanelTour
 	private void updateUi()
 	{
 		boolean enabled = config.enableTour();
-		boolean show = running || enabled;
+		boolean updateInfoPending = shouldShowUpdateInfo();
+		boolean show = running || updateInfoPending || enabled;
 		if (panel != null)
 		{
 			panel.setVisible(show);
@@ -224,14 +244,16 @@ public final class PanelTour
 		}
 		if (text != null)
 		{
+			List<String> steps = getSteps();
 			String msg = running
-				? "Step " + (step + 1) + "/" + STEPS.size() + ": " + STEPS.get(step)
-				: "Welcome! Click Start tour to begin a quick walkthrough.";
+				? getStepPrefix() + " " + (step + 1) + "/" + steps.size() + ":\n" + steps.get(step)
+				: getIdleMessage(updateInfoPending);
 			text.setText(msg);
 		}
 		if (startButton != null)
 		{
 			startButton.setVisible(!running);
+			startButton.setText(updateInfoPending ? "Update info" : "Start tour");
 		}
 		if (prevButton != null)
 		{
@@ -252,6 +274,11 @@ public final class PanelTour
 		clearHighlight();
 		if (!running)
 		{
+			return;
+		}
+		if (mode == Mode.UPDATE_INFO)
+		{
+			highlightUpdateInfoTargetForStep();
 			return;
 		}
 		switch (step)
@@ -291,6 +318,55 @@ public final class PanelTour
 		}
 	}
 
+	private void highlightUpdateInfoTargetForStep()
+	{
+		switch (step)
+		{
+			case 0:
+				highlight(targets.historyButton());
+				break;
+			case 1:
+				highlight(targets.popoutButton());
+				break;
+			case 2:
+				highlight(targets.editButton());
+				break;
+			case 3:
+				highlight(targets.geTaxControl());
+				break;
+			default:
+				clearHighlight();
+		}
+	}
+
+	private boolean shouldShowUpdateInfo()
+	{
+		String seenVersion = config.tourUpdateInfoSeenVersion();
+		return seenVersion == null || !UPDATE_INFO_VERSION.equals(seenVersion.trim());
+	}
+
+	private boolean isUpdateInfoActiveOrPending()
+	{
+		return mode == Mode.UPDATE_INFO || shouldShowUpdateInfo();
+	}
+
+	private List<String> getSteps()
+	{
+		return mode == Mode.UPDATE_INFO ? UPDATE_INFO_STEPS : QUICK_STEPS;
+	}
+
+	private String getStepPrefix()
+	{
+		return mode == Mode.UPDATE_INFO ? "Update info" : "Step";
+	}
+
+	private String getIdleMessage(boolean updateInfoPending)
+	{
+		return updateInfoPending
+			? "New in " + UPDATE_INFO_VERSION + ": click Update info for history, graph, edit mode, and GE tax."
+			: "Welcome! Click Start tour to begin a quick walkthrough.";
+	}
+
 	private void highlight(JComponent component)
 	{
 		if (component == null)
@@ -318,6 +394,24 @@ public final class PanelTour
 			component.repaint();
 		});
 		rainbowTimer.start();
+		scrollToHighlighted();
+	}
+
+	private void scrollToHighlighted()
+	{
+		if (highlighted == null)
+		{
+			return;
+		}
+		SwingUtilities.invokeLater(() -> {
+			if (highlighted == null)
+			{
+				return;
+			}
+			int width = Math.max(highlighted.getWidth(), highlighted.getPreferredSize().width);
+			int height = Math.max(highlighted.getHeight(), highlighted.getPreferredSize().height);
+			highlighted.scrollRectToVisible(new Rectangle(0, 0, width, height));
+		});
 	}
 
 	private void clearHighlight()
@@ -341,6 +435,12 @@ public final class PanelTour
 		void dispatch(PanelActions actions);
 	}
 
+	private enum Mode
+	{
+		QUICK,
+		UPDATE_INFO
+	}
+
 	public interface Targets
 	{
 		JComponent newPlayerField();
@@ -362,5 +462,13 @@ public final class PanelTour
 		JComponent recentSplitsTable();
 
 		JComponent stopButton();
+
+		JComponent historyButton();
+
+		JComponent popoutButton();
+
+		JComponent editButton();
+
+		JComponent geTaxControl();
 	}
 }

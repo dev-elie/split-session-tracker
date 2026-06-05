@@ -59,6 +59,7 @@ public class ManagerSession
 	private boolean historyDirty;
 	private String historyOriginalSessionsJson;
 	private String currentSessionId;
+	private String lastMoveEventFailureMessage;
 	@Getter
 	private boolean historyLoaded;
 
@@ -317,10 +318,11 @@ public class ManagerSession
 
 	public boolean moveEvent(int fromIndex, int toIndex)
 	{
+		lastMoveEventFailureMessage = null;
 		List<SplitEvent> allEvents = getAllEvents();
 		if (fromIndex < 0 || fromIndex >= allEvents.size() || toIndex < 0 || toIndex > allEvents.size())
 		{
-			return false;
+			return rejectMove("Cannot move that history row.");
 		}
 		if (toIndex == fromIndex || toIndex == fromIndex + 1)
 		{
@@ -341,11 +343,15 @@ public class ManagerSession
 		reorderedEvents.add(insertionIndex, event);
 		if (!hasValidRosterEventOrder(reorderedEvents))
 		{
-			return false;
+			return rejectMove("Cannot move a left event before that player joined.");
+		}
+		if (!hasValidLootRosterMembership(reorderedEvents))
+		{
+			return rejectMove("Cannot move loot outside that player's time in the session.");
 		}
 		if (!prepareHistoryMutation())
 		{
-			return false;
+			return rejectMove("History edit was cancelled.");
 		}
 
 		String targetSessionId = currentSessionId;
@@ -391,6 +397,48 @@ public class ManagerSession
 
 		invalidateEventsCache();
 		saveAfterMutation();
+		return true;
+	}
+
+	public String getLastMoveEventFailureMessage()
+	{
+		return lastMoveEventFailureMessage;
+	}
+
+	private boolean rejectMove(String message)
+	{
+		lastMoveEventFailureMessage = message;
+		return false;
+	}
+
+	private boolean hasValidLootRosterMembership(List<SplitEvent> events)
+	{
+		Set<String> playersWithJoin = events.stream()
+			.filter(event -> event != null && SplitEvent.TYPE_JOINED.equalsIgnoreCase(event.getType()) && event.getPlayer() != null)
+			.map(event -> event.getPlayer().toLowerCase(Locale.ENGLISH))
+			.collect(Collectors.toSet());
+		Set<String> activePlayers = new LinkedHashSet<>();
+		for (SplitEvent event : events)
+		{
+			if (event == null || event.getPlayer() == null)
+			{
+				continue;
+			}
+
+			String player = event.getPlayer().toLowerCase(Locale.ENGLISH);
+			if (SplitEvent.TYPE_JOINED.equalsIgnoreCase(event.getType()))
+			{
+				activePlayers.add(player);
+			}
+			else if (SplitEvent.TYPE_LEFT.equalsIgnoreCase(event.getType()))
+			{
+				activePlayers.remove(player);
+			}
+			else if (event.isLootEvent() && playersWithJoin.contains(player) && !activePlayers.contains(player))
+			{
+				return false;
+			}
+		}
 		return true;
 	}
 

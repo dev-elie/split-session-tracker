@@ -148,7 +148,11 @@ public class PanelView extends PluginPanel
 	private PanelActions actions;
 	private JButton btnCopyJson;
 	private JButton btnCopyMd;
+	private DropdownRip knownPlayersInfoDropdown;
 	private DropdownRip detectedValuesDropdown;
+	private DropdownRip recentSplitsDropdown;
+	private DropdownRip historyDropdown;
+	private DropdownRip settlementDropdown;
 
 	public PanelView(ManagerSession sessionManager, PluginConfig config, ManagerKnownPlayers playerManager, PanelController controller)
 	{
@@ -190,12 +194,14 @@ public class PanelView extends PluginPanel
 			@Override
 			public JComponent newPlayerField()
 			{
+				expandTourSection(knownPlayersInfoDropdown);
 				return newPlayerField;
 			}
 
 			@Override
 			public JComponent addAltDropdown()
 			{
+				expandTourSection(knownPlayersInfoDropdown);
 				return addAltDropdown;
 			}
 
@@ -220,24 +226,28 @@ public class PanelView extends PluginPanel
 			@Override
 			public JComponent metricsTable()
 			{
+				expandTourSection(settlementDropdown);
 				return metricsTable;
 			}
 
 			@Override
 			public JComponent copyMarkdownButton()
 			{
+				expandTourSection(settlementDropdown);
 				return btnCopyMd;
 			}
 
 			@Override
 			public JComponent detectedValuesDropdown()
 			{
+				expandTourSection(detectedValuesDropdown);
 				return detectedValuesDropdown;
 			}
 
 			@Override
 			public JComponent recentSplitsTable()
 			{
+				expandTourSection(recentSplitsDropdown);
 				return recentSplitsTable;
 			}
 
@@ -245,6 +255,32 @@ public class PanelView extends PluginPanel
 			public JComponent stopButton()
 			{
 				return btnStop;
+			}
+
+			@Override
+			public JComponent historyButton()
+			{
+				expandTourSection(historyDropdown);
+				return btnViewHistory;
+			}
+
+			@Override
+			public JComponent popoutButton()
+			{
+				return btnPopout;
+			}
+
+			@Override
+			public JComponent editButton()
+			{
+				return btnToggleEdit;
+			}
+
+			@Override
+			public JComponent geTaxControl()
+			{
+				expandTourSection(recentSplitsDropdown);
+				return historyGeTaxEnabled.isShowing() ? historyGeTaxEnabled : recentSplitsTable;
 			}
 		});
 
@@ -853,7 +889,8 @@ public class PanelView extends PluginPanel
 		gbc.anchor = GridBagConstraints.CENTER;
 		PlayersPanel.add(altButtonsRow, gbc);
 
-		return new DropdownRip("Known player info", PlayersPanel, config.enableTour());
+		knownPlayersInfoDropdown = new DropdownRip("Known player info", PlayersPanel, config.enableTour());
+		return knownPlayersInfoDropdown;
 	}
 
 	private JPanel generateSessionPanel()
@@ -1128,7 +1165,8 @@ public class PanelView extends PluginPanel
 		extraButtons.setOpaque(false);
 		extraButtons.add(btnToggleEdit);
 
-		return new DropdownRip("Recent splits", scroller, config.enableTour(), tooltip, extraButtons);
+		recentSplitsDropdown = new DropdownRip("Recent splits", scroller, config.enableTour(), tooltip, extraButtons);
+		return recentSplitsDropdown;
 	}
 
 	protected void onPencilClicked()
@@ -1191,8 +1229,9 @@ public class PanelView extends PluginPanel
 		gbc.gridy = 4;
 		historyPanel.add(archivedHistoryWarning, gbc);
 
-		return new DropdownRip("View history", historyPanel, false,
+		historyDropdown = new DropdownRip("View history", historyPanel, false,
 			"Load a stopped session. Close history to start a new session.");
+		return historyDropdown;
 	}
 
 	private JComponent generateMetrics()
@@ -1214,7 +1253,16 @@ public class PanelView extends PluginPanel
 		extraButtons.setOpaque(false);
 		extraButtons.add(btnPopout);
 
-		return new DropdownRip("Settlement information", wrapper, true, null, extraButtons);
+		settlementDropdown = new DropdownRip("Settlement information", wrapper, true, null, extraButtons);
+		return settlementDropdown;
+	}
+
+	private void expandTourSection(DropdownRip dropdown)
+	{
+		if (dropdown != null)
+		{
+			dropdown.setExpanded(true);
+		}
 	}
 
 	public void refreshMetricsContent()
